@@ -1,5 +1,5 @@
 [package]
-name = "rust-raiden"
+name = "raiden"
 version = "0.1.0"
 authors = ["Rakan Alhneiti <rakan.alhneiti@gmail.com>"]
 edition = "2018"
@@ -10,3 +10,6 @@ web3 = { git = "https://github.com/tomusdrw/rust-web3" }
 [[bin]]
 path = "raiden/main.rs"
 name = "raiden"
+
+[lib]
+path = "raiden/lib.rs"
