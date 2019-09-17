@@ -1,7 +1,5 @@
 use web3::types::BlockNumber;
 
-use crate::traits::StateChange;
-
 
 pub struct Block {
     pub chain_id: u32,
@@ -15,8 +13,4 @@ impl Block {
             block_number
         }
     }
-}
-
-impl StateChange for Block {
-
 }
