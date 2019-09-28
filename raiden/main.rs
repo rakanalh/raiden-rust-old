@@ -15,34 +15,10 @@ fn main() {
 }
  */
 
-use web3::futures::{Future, Stream};
-
-
 use raiden;
-use raiden::transfer;
 
 fn main() {
-    let (_eloop, ws) = web3::transports::WebSocket::new("ws://47.100.34.71:8547").unwrap();
-    let web3 = web3::Web3::new(ws.clone());
+    let mut service = raiden::service::RaidenService::default();
 
-    let mut sub = web3.eth_subscribe().subscribe_new_heads().wait().unwrap();
-
-    let mut manager: raiden::state::StateManager = raiden::state::StateManager::default();
-    let _ = match manager.restore_state() {
-        Err(_e) => manager.init_state(),
-        Ok(_result) => Ok(true)
-    };
-
-    (&mut sub).for_each(|block| {
-        let block_number = web3::types::BlockNumber::Number(block.number.unwrap());
-        let block_state_change = transfer::state_change::Block::new(1, block_number);
-
-        manager.dispatch(raiden::state_change::StateChange::Block(block_state_change))?;
-
-        Ok(())
-    }).wait().unwrap();
-
-    sub.unsubscribe();
-
-    drop(web3);
+    service.start();
 }

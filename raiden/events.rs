@@ -1,3 +1,1 @@
-pub struct Event {
-
-}
+pub struct Event {}

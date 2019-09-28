@@ -1,34 +1,64 @@
-use std::io;
+use crate::errors;
 use crate::state_change::StateChange;
+use crate::storage;
+use crate::transfer::chain::{handle_state_change, ChainTransitionResult};
 use crate::transfer::state::ChainState;
-use crate::transfer::chain::{ChainTransitionResult, handle_state_change};
+use std::rc::Rc;
+use std::result;
 
-#[derive(Default)]
+type Result<T> = result::Result<T, errors::StateTransitionError>;
+
 pub struct StateManager {
-    current_state: Option<ChainState>
+    dbconn: Rc<rusqlite::Connection>,
+    current_state: Option<ChainState>,
 }
 
-impl StateManager{
-    pub fn init_state(&mut self) -> Result<bool, io::Error> {
-        self.current_state = Some(ChainState {
-            block_number: web3::types::BlockNumber::Earliest
-        });
+impl StateManager {
+    pub fn new(dbconn: Rc<rusqlite::Connection>) -> StateManager {
+        StateManager {
+            dbconn,
+            current_state: None,
+        }
+    }
+
+    pub fn init_state(&mut self) -> result::Result<bool, errors::RaidenError> {
+        self.current_state = Some(ChainState { block_number: 1 });
         Ok(true)
     }
 
-    pub fn restore_state(&self) -> Result<bool, io::Error> {
-        Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid state"))
+    pub fn restore_state(&self) -> result::Result<bool, errors::RaidenError> {
+        Err(errors::RaidenError {
+            msg: String::from("Invalid state"),
+        })
     }
 
-    pub fn dispatch(&mut self, state_change: StateChange) -> Result<bool, io::Error> {
-        let transition: Result<ChainTransitionResult, io::Error> = handle_state_change(self.current_state.unwrap(), state_change);
-        let result = match transition {
+    pub fn transition(&mut self, state_change: StateChange) -> Result<bool> {
+        match self.store_state_change(state_change) {
+            Ok(result) => Ok(result),
+            Err(e) => Err(e),
+        }?;
+        self.dispatch(state_change)
+    }
+
+    fn dispatch(&mut self, state_change: StateChange) -> Result<bool> {
+        let current_state = self.current_state.clone().unwrap();
+
+        let transition: Result<ChainTransitionResult> =
+            handle_state_change(current_state, state_change);
+
+        match transition {
             Ok(transition_result) => {
-                self.current_state = Some(transition_result.new_state);
+                self.current_state.replace(transition_result.new_state);
                 Ok(true)
-            },
-            Err(_e) => Err(io::Error::new(io::ErrorKind::InvalidData, "Opps"))
-        };
-        result
+            }
+            Err(_e) => Err(errors::StateTransitionError {}),
+        }
+    }
+
+    fn store_state_change(&self, state_change: StateChange) -> Result<bool> {
+        match storage::store_state_change(&self.dbconn, state_change) {
+            Ok(result) => Ok(result),
+            Err(_) => Err(errors::StateTransitionError {}),
+        }
     }
 }
