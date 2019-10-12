@@ -1,9 +1,9 @@
 pub mod blockchain;
+pub mod enums;
 pub mod errors;
 pub mod events;
 pub mod service;
 pub mod state;
-pub mod state_change;
 pub mod storage;
 pub mod traits;
 pub mod transfer;

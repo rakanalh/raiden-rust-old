@@ -1,69 +1,87 @@
 use crate::errors::ChannelError;
+use crate::enums::ChainID;
+use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
-use web3::types::{Address, BlockNumber, H256};
+use web3::types::{Address, H256, U256, U64};
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CanonicalIdentifier {
-    chain_identifier: u16,
-    token_network_address: Address,
-    channel_identifier: u64,
+    pub chain_identifier: u16,
+    pub token_network_address: Address,
+    pub channel_identifier: U256,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChainState {
-    pub block_number: u64,
+    pub chain_id: ChainID,
+    pub block_number: U64,
+    pub our_address: Address,
+    pub identifiers_to_tokennetworkregistries: RefCell<HashMap<Address, TokenNetworkRegistryState>>,
 }
 
-#[derive(Clone)]
+impl ChainState {
+    pub fn new(chain_id: ChainID, block_number: U64, our_address: Address) -> ChainState {
+        ChainState {
+            chain_id,
+            block_number,
+            our_address,
+            identifiers_to_tokennetworkregistries: RefCell::new(HashMap::new()),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TokenNetworkRegistryState {
     pub address: Address,
-    pub token_network_list: Vec<Rc<TokenNetworkState>>,
-    pub tokennetworkaddresses_to_tokennetworks: HashMap<Address, Rc<TokenNetworkState>>,
+    pub tokennetworkaddresses_to_tokennetworks: HashMap<Address, TokenNetworkState>,
     pub tokenaddresses_to_tokennetworkaddresses: HashMap<Address, Address>,
 }
 
-impl<'a> TokenNetworkRegistryState {
+impl TokenNetworkRegistryState {
     pub fn default() -> TokenNetworkRegistryState {
         TokenNetworkRegistryState {
             address: Address::zero(),
-            token_network_list: vec![],
             tokennetworkaddresses_to_tokennetworks: HashMap::new(),
             tokenaddresses_to_tokennetworkaddresses: HashMap::new(),
         }
     }
 
-    pub fn new(token_network_list: Vec<Rc<TokenNetworkState>>) -> TokenNetworkRegistryState {
+    pub fn new(
+        address: Address,
+        token_network_list: Vec<TokenNetworkState>,
+    ) -> TokenNetworkRegistryState {
         let mut registry_state = TokenNetworkRegistryState::default();
         for token_network in token_network_list.iter() {
             let token_network_address = token_network.address;
             let token_address = token_network.token_address;
             registry_state
                 .tokennetworkaddresses_to_tokennetworks
-                .insert(token_network_address, Rc::clone(token_network));
+                .insert(token_network_address, token_network.clone());
 
             registry_state
                 .tokenaddresses_to_tokennetworkaddresses
                 .insert(token_address, token_network.address);
         }
+        registry_state.address = address;
         registry_state
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TokenNetworkState {
-    address: Address,
-    token_address: Address,
-    network_graph: TokenNetworkGraphState,
-    channelidentifiers_to_channels: HashMap<u64, ChannelState>,
-    partneraddresses_to_channelidentifiers: HashMap<Address, Vec<u64>>,
+    pub address: Address,
+    pub token_address: Address,
+    pub network_graph: TokenNetworkGraphState,
+    pub channelidentifiers_to_channels: HashMap<u64, ChannelState>,
+    pub partneraddresses_to_channelidentifiers: HashMap<Address, Vec<u64>>,
 }
 
 impl TokenNetworkState {
-    pub fn default() -> TokenNetworkState {
+    pub fn new(address: Address, token_address: Address) -> TokenNetworkState {
         TokenNetworkState {
-            address: Address::zero(),
-            token_address: Address::zero(),
+            address,
+            token_address,
             network_graph: TokenNetworkGraphState::default(),
             channelidentifiers_to_channels: HashMap::new(),
             partneraddresses_to_channelidentifiers: HashMap::new(),
@@ -71,7 +89,7 @@ impl TokenNetworkState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TokenNetworkGraphState {}
 
 impl TokenNetworkGraphState {
@@ -80,7 +98,7 @@ impl TokenNetworkGraphState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChannelState {
     canonical_identifier: CanonicalIdentifier,
     token_address: Address,
@@ -96,7 +114,7 @@ pub struct ChannelState {
 }
 
 impl ChannelState {
-    fn new(
+    pub fn new(
         canonical_identifier: CanonicalIdentifier,
         token_address: Address,
         token_network_registry_address: Address,
@@ -131,7 +149,7 @@ impl ChannelState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OurEndState {
     address: Address,
     contract_balance: u64,
@@ -166,7 +184,7 @@ impl OurEndState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PartnerEndState {
     address: Address,
     contract_balance: u64,
@@ -201,7 +219,7 @@ impl PartnerEndState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BalanceProofUnsignedState {
     nonce: u64,
     transferred_amount: u64,
@@ -211,7 +229,7 @@ pub struct BalanceProofUnsignedState {
     balance_hash: H256,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BalanceProofSignedState {
     nonce: u64,
     transferred_amount: u64,
@@ -224,7 +242,7 @@ pub struct BalanceProofSignedState {
     balance_hash: H256,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PendingLocksState {
     locks: Vec<H256>,
 }
@@ -235,7 +253,7 @@ impl PendingLocksState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UnlockPartialProofState {
     lock: HashTimeLockState,
     secret: H256,
@@ -245,7 +263,7 @@ pub struct UnlockPartialProofState {
     encoded: H256,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct HashTimeLockState {
     amount: u64,
     expiration: u16,
@@ -264,21 +282,21 @@ impl HashTimeLockState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ExpiredWithdrawState {
     total_withdraw: u64,
     expiration: u16,
     nonce: u64,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PendingWithdrawState {
     total_withdraw: u64,
     expiration: u16,
     nonce: u64,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FeeScheduleState {
     flat: u64,
     proportional: u64,
@@ -286,15 +304,15 @@ pub struct FeeScheduleState {
     penalty_func: Option<u64>,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum TransactionResult {
     SUCCESS,
     FAILURE,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionExecutionStatus {
-    started_block_number: Option<BlockNumber>,
-    finished_block_number: Option<BlockNumber>,
-    result: Option<TransactionResult>,
+    pub started_block_number: Option<u64>,
+    pub finished_block_number: Option<u64>,
+    pub result: Option<TransactionResult>,
 }

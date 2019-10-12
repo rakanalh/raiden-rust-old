@@ -5,11 +5,17 @@ authors = ["Rakan Alhneiti <rakan.alhneiti@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-web3 = { git = "https://github.com/tomusdrw/rust-web3" }
+clap = "2.33.0"
+ethabi = "8.0.0"
+ethereum-types = "0.6.0"
+ethkey = "0.3"
+hex = "0.4.0"
 rusqlite = "0.20.0"
 serde = "1.0.101"
 serde_json = "1.0.40"
-hex = "0.4.0"
+tokio = "0.1.17"
+tokio-core = "0.1.17"
+web3 = { git = "https://github.com/tomusdrw/rust-web3" }
 
 [[bin]]
 path = "raiden/main.rs"

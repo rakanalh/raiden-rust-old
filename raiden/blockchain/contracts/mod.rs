@@ -1,6 +1,9 @@
 use super::helpers::parse_address;
-use serde_json;
 use web3::types::Address;
+
+pub mod abi;
+
+pub const CONTRACTS: &str = include_str!("data/contracts.json");
 const DEPLOYMENT_KOVAN: &str = include_str!("data/deployment_kovan.json");
 
 pub fn get_token_network_registry_address() -> Address {
@@ -14,7 +17,7 @@ pub fn get_token_network_registry_address() -> Address {
         .get("address")
         .unwrap();
 
-    if let Some(parsed_address) = parse_address(registry_address.to_string()) {
+    if let Some(parsed_address) = parse_address(registry_address.as_str().unwrap().to_string()) {
         return parsed_address;
     }
     Address::zero()

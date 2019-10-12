@@ -1,12 +1,34 @@
+use crate::enums::StateChange;
 use crate::errors::StateTransitionError;
 use crate::events::Event;
-use crate::state_change::StateChange;
-use crate::transfer::state::ChainState;
-use crate::transfer::state_change::{Block, ContractReceiveTokenNetworkRegistry};
+use crate::transfer::state::{
+    ChainState,
+    TokenNetworkRegistryState,
+};
+use crate::transfer::state_change::{
+    ActionInitChain,
+    Block,
+    ContractReceiveTokenNetworkCreated,
+    ContractReceiveTokenNetworkRegistry,
+    ContractReceiveChannelOpened
+};
 
 pub struct ChainTransitionResult {
     pub new_state: ChainState,
     pub events: Vec<Event>,
+}
+
+fn handle_action_init_chain(
+    state_change: ActionInitChain,
+) -> Result<ChainTransitionResult, StateTransitionError> {
+    Ok(ChainTransitionResult {
+        new_state: ChainState::new(
+            state_change.chain_id,
+            state_change.block_number,
+            state_change.our_address,
+        ),
+        events: vec![],
+    })
 }
 
 fn handle_new_block(
@@ -24,22 +46,73 @@ fn handle_contract_receive_token_network_registry(
     chain_state: ChainState,
     state_change: ContractReceiveTokenNetworkRegistry,
 ) -> Result<ChainTransitionResult, StateTransitionError> {
-    Err(StateTransitionError {})
+    chain_state.identifiers_to_tokennetworkregistries.borrow_mut().insert(
+        state_change.token_network_registry.address,
+        state_change.token_network_registry,
+    );
+    Ok(ChainTransitionResult{
+        new_state: chain_state,
+        events: vec![],
+    })
+}
+
+fn handle_contract_receive_token_network_created(
+    chain_state: ChainState,
+    state_change: ContractReceiveTokenNetworkCreated,
+) -> Result<ChainTransitionResult, StateTransitionError> {
+    let mut token_network_registries = chain_state.identifiers_to_tokennetworkregistries.borrow_mut();
+    let mut token_network_registry = token_network_registries.get_mut(
+        &state_change.token_network_registry_address
+    );
+
+    if token_network_registry.is_none() {
+        return Err(StateTransitionError {
+            msg: format!("Token network registry {} was not found", state_change.token_network_registry_address)
+        });
+    }
+
+    let token_network_registry: &mut TokenNetworkRegistryState = token_network_registry.as_mut().unwrap();
+    token_network_registry.tokennetworkaddresses_to_tokennetworks.insert(
+        state_change.token_network.address,
+        state_change.token_network.clone(),
+    );
+    token_network_registry.tokenaddresses_to_tokennetworkaddresses.insert(
+        state_change.token_network.token_address.clone(),
+        state_change.token_network.address.clone(),
+    );
+    drop(token_network_registries);
+    Ok(ChainTransitionResult{
+        new_state: chain_state,
+        events: vec![],
+    })
+}
+
+fn handle_contract_receive_channel_opened(chain_state: ChainState, state_change: ContractReceiveChannelOpened) -> Result<ChainTransitionResult, StateTransitionError> {
+    return Err(StateTransitionError {
+        msg: format!("Not implemented")
+    })
 }
 
 pub fn handle_state_change(
-    chain_state: ChainState,
+    chain_state: Option<ChainState>,
     state_change: StateChange,
 ) -> Result<ChainTransitionResult, StateTransitionError> {
-    let new_state = chain_state;
     let result: Result<ChainTransitionResult, StateTransitionError> = match state_change {
-        StateChange::Block(block) => handle_new_block(new_state, block),
-        StateChange::ContractReceiveTokenNetworkRegistry(
-            contract_receive_token_network_registry,
-        ) => handle_contract_receive_token_network_registry(
-            new_state,
-            contract_receive_token_network_registry,
-        ),
+        StateChange::ActionInitChain(state_change) => {
+            handle_action_init_chain(state_change)
+        },
+        StateChange::Block(state_change) => {
+            handle_new_block(chain_state.unwrap(), state_change)
+        }
+        StateChange::ContractReceiveTokenNetworkRegistry(state_change) => {
+            handle_contract_receive_token_network_registry(chain_state.unwrap(), state_change)
+        }
+        StateChange::ContractReceiveTokenNetworkCreated(state_change) => {
+            handle_contract_receive_token_network_created(chain_state.unwrap(), state_change)
+        },
+        StateChange::ContractReceiveChannelOpened(state_change) => {
+            handle_contract_receive_channel_opened(chain_state.unwrap(), state_change)
+        }
     };
     result
 }

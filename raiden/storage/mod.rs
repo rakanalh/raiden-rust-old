@@ -5,7 +5,7 @@ use rusqlite::{Connection, Result as SQLiteResult};
 use std::result::Result;
 
 use crate::errors::SerializationError;
-use crate::state_change::StateChange;
+use crate::enums::StateChange;
 
 pub fn setup_database(conn: &Connection) -> SQLiteResult<()> {
     conn.execute(

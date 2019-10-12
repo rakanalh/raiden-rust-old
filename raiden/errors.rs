@@ -36,11 +36,13 @@ impl error::Error for RaidenError {
 }
 
 #[derive(Debug, Clone)]
-pub struct StateTransitionError;
+pub struct StateTransitionError{
+    pub msg: String,
+}
 
 impl fmt::Display for StateTransitionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Inv")
+        write!(f, "{}", self.msg)
     }
 }
 
