@@ -1,5 +1,5 @@
-use crate::errors::ChannelError;
 use crate::enums::ChainID;
+use crate::errors::ChannelError;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -7,7 +7,7 @@ use web3::types::{Address, H256, U256, U64};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CanonicalIdentifier {
-    pub chain_identifier: u16,
+    pub chain_identifier: u64,
     pub token_network_address: Address,
     pub channel_identifier: U256,
 }
@@ -39,19 +39,15 @@ pub struct TokenNetworkRegistryState {
 }
 
 impl TokenNetworkRegistryState {
-    pub fn default() -> TokenNetworkRegistryState {
-        TokenNetworkRegistryState {
-            address: Address::zero(),
-            tokennetworkaddresses_to_tokennetworks: HashMap::new(),
-            tokenaddresses_to_tokennetworkaddresses: HashMap::new(),
-        }
-    }
-
     pub fn new(
         address: Address,
         token_network_list: Vec<TokenNetworkState>,
     ) -> TokenNetworkRegistryState {
-        let mut registry_state = TokenNetworkRegistryState::default();
+        let mut registry_state = TokenNetworkRegistryState {
+            address: Address::zero(),
+            tokennetworkaddresses_to_tokennetworks: HashMap::new(),
+            tokenaddresses_to_tokennetworkaddresses: HashMap::new(),
+        };
         for token_network in token_network_list.iter() {
             let token_network_address = token_network.address;
             let token_address = token_network.token_address;
@@ -100,17 +96,17 @@ impl TokenNetworkGraphState {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChannelState {
-    canonical_identifier: CanonicalIdentifier,
-    token_address: Address,
-    token_network_registry_address: Address,
-    reveal_timeout: u16,
-    settle_timeout: u16,
-    our_state: OurEndState,
-    partner_state: PartnerEndState,
-    open_transaction: TransactionExecutionStatus,
-    close_transaction: Option<TransactionExecutionStatus>,
-    settle_transaction: Option<TransactionExecutionStatus>,
-    update_transaction: Option<TransactionExecutionStatus>,
+    pub canonical_identifier: CanonicalIdentifier,
+    pub token_address: Address,
+    pub token_network_registry_address: Address,
+    pub reveal_timeout: u16,
+    pub settle_timeout: U256,
+    pub our_state: OurEndState,
+    pub partner_state: PartnerEndState,
+    pub open_transaction: TransactionExecutionStatus,
+    pub close_transaction: Option<TransactionExecutionStatus>,
+    pub settle_transaction: Option<TransactionExecutionStatus>,
+    pub update_transaction: Option<TransactionExecutionStatus>,
 }
 
 impl ChannelState {
@@ -121,10 +117,10 @@ impl ChannelState {
         our_address: Address,
         partner_address: Address,
         reveal_timeout: u16,
-        settle_timeout: u16,
+        settle_timeout: U256,
         open_transaction: TransactionExecutionStatus,
     ) -> Result<ChannelState, ChannelError> {
-        if reveal_timeout >= settle_timeout {
+        if U256::from(reveal_timeout) >= settle_timeout {
             return Err(ChannelError {
                 msg: "reveal_timeout must be smaller than settle_timeout".to_string(),
             });
@@ -312,7 +308,7 @@ pub enum TransactionResult {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionExecutionStatus {
-    pub started_block_number: Option<u64>,
-    pub finished_block_number: Option<u64>,
+    pub started_block_number: Option<U64>,
+    pub finished_block_number: Option<U64>,
     pub result: Option<TransactionResult>,
 }

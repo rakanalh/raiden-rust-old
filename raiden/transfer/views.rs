@@ -1,0 +1,17 @@
+use crate::transfer::state::{ChainState, TokenNetworkState};
+use web3::types::Address;
+
+pub fn get_token_network<'a>(
+    chain_state: &'a ChainState,
+    token_network_address: &'a Address,
+) -> Option<&'a TokenNetworkState> {
+    let mut token_network: Option<&TokenNetworkState> = None;
+
+    let token_network_registries = chain_state.identifiers_to_tokennetworkregistries.borrow();
+    for token_network_registry in token_network_registries.values() {
+        token_network = token_network_registry
+            .tokennetworkaddresses_to_tokennetworks
+            .get(token_network_address);
+    }
+    token_network.clone()
+}

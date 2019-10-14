@@ -4,15 +4,13 @@ extern crate web3;
 
 use crate::blockchain::contracts;
 use crate::blockchain::events;
-use crate::enums::{StateChange, ChainID};
+use crate::enums::{ChainID, StateChange};
 use crate::state::StateManager;
 use crate::storage;
 use crate::transfer;
 use crate::transfer::state::TokenNetworkRegistryState;
-use crate::transfer::state_change::{
-    ActionInitChain,
-    ContractReceiveTokenNetworkRegistry
-};
+use crate::transfer::state_change::{ActionInitChain, ContractReceiveTokenNetworkRegistry};
+use ethsign::SecretKey;
 use rusqlite::Connection;
 use std::process;
 use std::rc::Rc;
@@ -24,12 +22,14 @@ use web3::Web3;
 
 pub struct RaidenService {
     pub chain_id: ChainID,
+    pub our_address: Address,
+    pub secret_key: SecretKey,
     state_manager: StateManager,
     contracts_registry: contracts::abi::ContractRegistry,
 }
 
 impl RaidenService {
-    pub fn new(chain_id: ChainID) -> RaidenService {
+    pub fn new(chain_id: ChainID, our_address: Address, secret_key: SecretKey) -> RaidenService {
         let conn = match Connection::open("raiden.db") {
             Ok(conn) => Rc::new(conn),
             Err(e) => {
@@ -47,6 +47,8 @@ impl RaidenService {
         let contracts_registry = contracts::abi::ContractRegistry::default();
         RaidenService {
             chain_id,
+            our_address,
+            secret_key,
             state_manager,
             contracts_registry,
         }
@@ -57,10 +59,13 @@ impl RaidenService {
             let init_chain = ActionInitChain {
                 chain_id: self.chain_id.clone(),
                 block_number: U64::from(1),
-                our_address: Address::zero()
+                our_address: self.our_address,
             };
 
-            if let Err(e) = self.state_manager.transition(StateChange::ActionInitChain(init_chain)) {
+            if let Err(e) = self
+                .state_manager
+                .transition(StateChange::ActionInitChain(init_chain))
+            {
                 panic!(format!("Could not initialize chain state: {}", e));
             }
 
@@ -143,9 +148,11 @@ impl RaidenService {
 
                 if let Ok(logs) = result {
                     for log in logs {
-                        if let Some(state_change) =
-                            events::log_to_blockchain_state_change(&self.contracts_registry, &log)
-                        {
+                        if let Some(state_change) = events::log_to_blockchain_state_change(
+                            self.state_manager.current_state.as_ref().unwrap(),
+                            &self.contracts_registry,
+                            &log,
+                        ) {
                             state_changes.push(state_change);
                         }
                     }
@@ -173,7 +180,8 @@ impl RaidenService {
 
                 println!("Received block: {}", block_number);
 
-                let block_state_change = transfer::state_change::Block::new(self.chain_id.clone(), block_number);
+                let block_state_change =
+                    transfer::state_change::Block::new(self.chain_id.clone(), block_number);
 
                 let _ = self
                     .state_manager

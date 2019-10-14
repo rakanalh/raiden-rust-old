@@ -2,7 +2,7 @@ use web3::types::Address;
 use crate::enums::StateChange;
 use crate::errors;
 use crate::storage;
-use crate::transfer::chain::{self, ChainTransitionResult};
+use crate::transfer::chain::{self, ChainTransition};
 use crate::transfer::state::ChainState;
 use std::rc::Rc;
 use std::result;
@@ -39,8 +39,8 @@ impl StateManager {
     fn dispatch(&mut self, state_change: StateChange) -> Result<bool> {
         let current_state = self.current_state.clone();
         
-        let transition: Result<ChainTransitionResult> =
-            chain::handle_state_change(current_state, state_change);
+        let transition: Result<ChainTransition> =
+            chain::state_transition(current_state, state_change);
 
         match transition {
             Ok(transition_result) => {

@@ -1,14 +1,18 @@
 use crate::blockchain::contracts::abi::ContractRegistry;
 use crate::blockchain::contracts::abi::Event;
+use crate::constants;
 use crate::enums::StateChange;
-use crate::transfer::state::{CanonicalIdentifier, ChannelState, TokenNetworkState, TransactionExecutionStatus, TransactionResult};
+use crate::transfer::state::{
+    CanonicalIdentifier, ChainState, ChannelState, TokenNetworkState, TransactionExecutionStatus,
+    TransactionResult,
+};
 use crate::transfer::state_change::{
     ContractReceiveChannelOpened, ContractReceiveTokenNetworkCreated,
 };
 use ethabi::Token;
-use web3::types::{Address, Log, U256};
+use web3::types::{Address, Log, U256, U64};
 
-fn create_token_network_created_state_change(base_event: Event, log: &Log) -> StateChange {
+fn create_token_network_created_state_change(base_event: Event, log: &Log) -> Option<StateChange> {
     let token_address = match base_event.data[0] {
         Token::Address(address) => address,
         _ => Address::zero(),
@@ -19,16 +23,20 @@ fn create_token_network_created_state_change(base_event: Event, log: &Log) -> St
     };
     let token_network = TokenNetworkState::new(token_network_address, token_address);
     let token_network_registry_address = log.address;
-    StateChange::ContractReceiveTokenNetworkCreated(ContractReceiveTokenNetworkCreated {
+    Some(StateChange::ContractReceiveTokenNetworkCreated(ContractReceiveTokenNetworkCreated {
         transaction_hash: Some(base_event.transaction_hash),
         block_number: base_event.block_number,
         block_hash: base_event.block_hash,
         token_network_registry_address,
         token_network,
-    })
+    }))
 }
 
-fn create_channel_opened_state_change(base_event: Event, log: &Log) -> StateChange {
+fn create_channel_opened_state_change(
+    chain_state: &ChainState,
+    base_event: Event,
+    log: &Log,
+) -> Option<StateChange> {
     let channel_identifier = match base_event.data[0] {
         Token::Uint(identifier) => identifier,
         _ => U256::zero(),
@@ -46,18 +54,25 @@ fn create_channel_opened_state_change(base_event: Event, log: &Log) -> StateChan
         _ => U256::zero(),
     };
 
+    let partner_address: Address;
+    let our_address = chain_state.our_address;
+    if participant1 == our_address {
+        partner_address = participant2;
+    } else if participant2 == our_address {
+        partner_address = participant1;
+    } else {
+        return None;
+    }
+
     let chain_identifier = 1;
     let token_network_address = log.address;
     let token_address = Address::zero();
     let token_network_registry_address = Address::zero();
-    let our_address = Address::zero();
-    let partner_address = Address::zero();
-    let reveal_timeout = 0;
-    let settle_timeout = 0;
-    let open_transaction = TransactionExecutionStatus{
-        started_block_number: Some(0),
-        finished_block_number: Some(0),
-        result: Some(TransactionResult::SUCCESS)
+    let reveal_timeout = constants::DEFAULT_REVEAL_TIMEOUT;
+    let open_transaction = TransactionExecutionStatus {
+        started_block_number: Some(U64::from(0)),
+        finished_block_number: Some(base_event.block_number),
+        result: Some(TransactionResult::SUCCESS),
     };
     let channel_state = ChannelState::new(
         CanonicalIdentifier {
@@ -74,23 +89,28 @@ fn create_channel_opened_state_change(base_event: Event, log: &Log) -> StateChan
         open_transaction,
     );
 
-    StateChange::ContractReceiveChannelOpened(ContractReceiveChannelOpened {
+    Some(StateChange::ContractReceiveChannelOpened(ContractReceiveChannelOpened {
         transaction_hash: Some(base_event.transaction_hash),
         block_number: base_event.block_number,
         block_hash: base_event.block_hash,
-        channel_state: channel_state.unwrap()
-    })
+        channel_state: channel_state.unwrap(),
+    }))
 }
 
 pub fn log_to_blockchain_state_change(
+    chain_state: &ChainState,
     contract_registry: &ContractRegistry,
     log: &Log,
 ) -> Option<StateChange> {
     let base_event = contract_registry.log_to_event(log)?;
 
     match base_event.name.as_ref() {
-        "TokenNetworkCreated" => Some(create_token_network_created_state_change(base_event, log)),
-        "ChannelOpened" => Some(create_channel_opened_state_change(base_event, log)),
+        "TokenNetworkCreated" => create_token_network_created_state_change(base_event, log),
+        "ChannelOpened" => create_channel_opened_state_change(
+            chain_state,
+            base_event,
+            log,
+        ),
         &_ => None,
     }
 }
