@@ -36,12 +36,11 @@ fn handle_new_block(
 }
 
 fn handle_contract_receive_token_network_registry(
-    chain_state: ChainState,
+    mut chain_state: ChainState,
     state_change: state_change::ContractReceiveTokenNetworkRegistry,
 ) -> Result<ChainTransition, StateTransitionError> {
     chain_state
         .identifiers_to_tokennetworkregistries
-        .borrow_mut()
         .insert(
             state_change.token_network_registry.address,
             state_change.token_network_registry,
@@ -53,12 +52,10 @@ fn handle_contract_receive_token_network_registry(
 }
 
 fn handle_contract_receive_token_network_created(
-    chain_state: ChainState,
+    mut chain_state: ChainState,
     state_change: state_change::ContractReceiveTokenNetworkCreated,
 ) -> Result<ChainTransition, StateTransitionError> {
-    let mut token_network_registries = chain_state
-        .identifiers_to_tokennetworkregistries
-        .borrow_mut();
+    let token_network_registries = &mut chain_state.identifiers_to_tokennetworkregistries;
     let mut token_network_registry =
         token_network_registries.get_mut(&state_change.token_network_registry_address);
 
@@ -110,12 +107,12 @@ fn handle_token_network_state_change(
             events: vec![],
         });
     }
-    let mut token_network_state = token_network_state.unwrap().clone();
-    let result = token_network::state_transition(
+    let token_network_state = token_network_state.unwrap().clone();
+    let _result = token_network::state_transition(
         token_network_state,
         StateChange::ContractReceiveChannelOpened(state_change),
     );
-    
+
     Ok(ChainTransition {
         new_state: chain_state,
         events: vec![],

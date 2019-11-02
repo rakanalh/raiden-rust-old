@@ -1,7 +1,6 @@
 use crate::enums::ChainID;
 use crate::errors::ChannelError;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use web3::types::{Address, H256, U256, U64};
 
@@ -17,7 +16,7 @@ pub struct ChainState {
     pub chain_id: ChainID,
     pub block_number: U64,
     pub our_address: Address,
-    pub identifiers_to_tokennetworkregistries: RefCell<HashMap<Address, TokenNetworkRegistryState>>,
+    pub identifiers_to_tokennetworkregistries: HashMap<Address, TokenNetworkRegistryState>,
 }
 
 impl ChainState {
@@ -26,7 +25,7 @@ impl ChainState {
             chain_id,
             block_number,
             our_address,
-            identifiers_to_tokennetworkregistries: RefCell::new(HashMap::new()),
+            identifiers_to_tokennetworkregistries: HashMap::new(),
         }
     }
 }

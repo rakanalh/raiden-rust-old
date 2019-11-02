@@ -1,12 +1,11 @@
 use crate::enums::ChainID;
 use crate::transfer::state::{
-    CanonicalIdentifier,
     ChannelState,
     TokenNetworkRegistryState,
     TokenNetworkState,
 };
 use serde::{Deserialize, Serialize};
-use web3::types::{Address, BlockNumber, H256, U64};
+use web3::types::{Address, H256, U64};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Block {

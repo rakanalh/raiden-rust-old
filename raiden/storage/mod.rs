@@ -20,9 +20,9 @@ pub fn setup_database(conn: &Connection) -> SQLiteResult<()> {
 }
 
 pub fn store_state_change(
-    conn: &Connection,
+    _conn: &Connection,
     state_change: StateChange,
 ) -> Result<bool, SerializationError> {
-    let serialized_state_change = serde_json::to_string(&state_change);
+    let _serialized_state_change = serde_json::to_string(&state_change);
     Ok(true)
 }

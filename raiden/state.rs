@@ -1,4 +1,3 @@
-use web3::types::Address;
 use crate::enums::StateChange;
 use crate::errors;
 use crate::storage;
@@ -38,7 +37,7 @@ impl StateManager {
 
     fn dispatch(&mut self, state_change: StateChange) -> Result<bool> {
         let current_state = self.current_state.clone();
-        
+
         let transition: Result<ChainTransition> =
             chain::state_transition(current_state, state_change);
 

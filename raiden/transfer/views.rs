@@ -7,7 +7,7 @@ pub fn get_token_network<'a>(
 ) -> Option<&'a TokenNetworkState> {
     let mut token_network: Option<&TokenNetworkState> = None;
 
-    let token_network_registries = chain_state.identifiers_to_tokennetworkregistries.borrow();
+    let token_network_registries = &chain_state.identifiers_to_tokennetworkregistries;
     for token_network_registry in token_network_registries.values() {
         token_network = token_network_registry
             .tokennetworkaddresses_to_tokennetworks
