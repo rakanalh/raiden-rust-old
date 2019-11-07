@@ -1,38 +1,45 @@
-use std::io::{stdin, stdout, Write};
-use std::collections::HashMap;
+use clap::{App, Arg, SubCommand};
+use ethsign::SecretKey;
 use rpassword;
+use std::collections::HashMap;
+use std::io::{stdin, stdout, Write};
 use web3::types::Address;
-use ethsign::{SecretKey};
-use clap::{Arg, App, SubCommand};
 
 use crate::accounts::keystore;
 
 pub fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
     App::new("Raiden unofficial rust client")
-        .arg(Arg::with_name("chain-id")
-             .short("c")
-             .long("chain-id")
-             .possible_values(&["ropsten", "kovan", "goerli", "mainnet"])
-             .default_value("mainnet")
-             .required(true)
-             .takes_value(true)
-             .help("Specify the blockchain to run Raiden with"))
-        .arg(Arg::with_name("eth-rpc-endpoint")
-             .short("e")
-             .long("eth-rpc-endpoint")
-             .required(true)
-             .help("Specify the RPC endpoint to interact with"))
-        .arg(Arg::with_name("keystore-path")
-             .short("k")
-             .long("keystore-path")
-             .required(true)
-             .takes_value(true))
-        .arg(Arg::with_name("verbosity")
-             .short("v")
-             .multiple(true)
-             .help("Sets the level of verbosity"))
-        .subcommand(SubCommand::with_name("run")
-                    .about("Run the raiden client"))
+        .arg(
+            Arg::with_name("chain-id")
+                .short("c")
+                .long("chain-id")
+                .possible_values(&["ropsten", "kovan", "goerli", "mainnet"])
+                .default_value("mainnet")
+                .required(true)
+                .takes_value(true)
+                .help("Specify the blockchain to run Raiden with"),
+        )
+        .arg(
+            Arg::with_name("eth-rpc-endpoint")
+                .short("e")
+                .long("eth-rpc-endpoint")
+                .required(true)
+                .help("Specify the RPC endpoint to interact with"),
+        )
+        .arg(
+            Arg::with_name("keystore-path")
+                .short("k")
+                .long("keystore-path")
+                .required(true)
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("verbosity")
+                .short("v")
+                .multiple(true)
+                .help("Sets the level of verbosity"),
+        )
+        .subcommand(SubCommand::with_name("run").about("Run the raiden client"))
 }
 
 pub fn prompt_key(keys: &HashMap<String, Address>) -> String {
@@ -47,11 +54,13 @@ pub fn prompt_key(keys: &HashMap<String, Address>) -> String {
         }
         print!("Selected key: ");
         let _ = stdout().flush();
-        stdin().read_line(&mut s).expect("Did not enter a correct string");
+        stdin()
+            .read_line(&mut s)
+            .expect("Did not enter a correct string");
         let selected_value: Result<u32, _> = s.trim().parse();
         if let Ok(chosen_index) = selected_value {
             if (chosen_index as usize) >= keys.len() {
-                continue
+                continue;
             }
             return keys.keys().nth(chosen_index as usize).unwrap().clone();
         }

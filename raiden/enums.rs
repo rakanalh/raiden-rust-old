@@ -1,11 +1,8 @@
-use std::str::FromStr;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use crate::transfer::state_change::{
-    Block,
-    ActionInitChain,
-    ContractReceiveChannelOpened,
-    ContractReceiveTokenNetworkCreated,
+    ActionInitChain, Block, ContractReceiveChannelOpened, ContractReceiveTokenNetworkCreated,
     ContractReceiveTokenNetworkRegistry,
 };
 
@@ -21,14 +18,14 @@ pub enum ChainID {
 impl FromStr for ChainID {
     type Err = ();
 
-    fn from_str(s: &str) -> Result<ChainID, ()>{
+    fn from_str(s: &str) -> Result<ChainID, ()> {
         match s {
             "mainnet" => Ok(ChainID::Mainnet),
             "ropsten" => Ok(ChainID::Ropsten),
             "rinkeby" => Ok(ChainID::Rinkeby),
             "goerli" => Ok(ChainID::Goerli),
             "kovan" => Ok(ChainID::Kovan),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }

@@ -11,21 +11,22 @@ use crate::transfer;
 use crate::transfer::state::TokenNetworkRegistryState;
 use crate::transfer::state_change::{ActionInitChain, ContractReceiveTokenNetworkRegistry};
 use ethsign::SecretKey;
+use futures::IntoFuture;
 use rusqlite::Connection;
+use std::cell::RefCell;
 use std::process;
 use std::rc::Rc;
-use web3::api::SubscriptionStream;
+use tokio_core::reactor;
 use web3::futures::{Future, Stream};
 use web3::transports::WebSocket;
-use web3::types::{Address, BlockHeader, H256, U64};
-use web3::Web3;
+use web3::types::{Address, H256, U64};
 
 pub struct RaidenService {
     pub chain_id: ChainID,
     pub our_address: Address,
     pub secret_key: SecretKey,
-    state_manager: StateManager,
-    contracts_registry: contracts::abi::ContractRegistry,
+    state_manager: Rc<RefCell<StateManager>>,
+    contracts_registry: Rc<contracts::abi::ContractRegistry>,
 }
 
 impl RaidenService {
@@ -49,23 +50,28 @@ impl RaidenService {
             chain_id,
             our_address,
             secret_key,
-            state_manager,
-            contracts_registry,
+            contracts_registry: Rc::new(contracts_registry),
+            state_manager: Rc::new(RefCell::new(state_manager)),
         }
     }
 
-    pub fn start(&mut self) {
-        if let Err(_e) = self.state_manager.restore_state() {
+    pub fn start(&self, eloop: &reactor::Core) {
+        let state_manager = self.state_manager.clone();
+        let mut initialize = false;
+        if let Err(_e) = state_manager.borrow_mut().restore_state() {
+            initialize = true;
+        }
+
+        if initialize {
             let init_chain = ActionInitChain {
                 chain_id: self.chain_id.clone(),
                 block_number: U64::from(1),
                 our_address: self.our_address,
             };
-
-            if let Err(e) = self
-                .state_manager
-                .transition(StateChange::ActionInitChain(init_chain))
-            {
+            if let Err(e) = StateManager::transition(
+                self.state_manager.clone(),
+                StateChange::ActionInitChain(init_chain),
+            ) {
                 panic!(format!("Could not initialize chain state: {}", e));
             }
 
@@ -83,27 +89,29 @@ impl RaidenService {
                 last_log_block_hash,
             );
 
-            let transition_result =
-                self.state_manager
-                    .transition(StateChange::ContractReceiveTokenNetworkRegistry(
-                        new_network_registry_state_change,
-                    ));
+            let transition_result = StateManager::transition(
+                self.state_manager.clone(),
+                StateChange::ContractReceiveTokenNetworkRegistry(new_network_registry_state_change),
+            );
             if let Err(e) = transition_result {
                 println!("Failed to transition: {}", e);
             }
-        };
+        }
 
         self.install_filters();
-        self.poll_filters();
-        self.poll_filters();
-        println!("Chain State {:?}", self.state_manager.current_state);
-        //let (web3, ws_subscription) = self.run_blocks_monitor();
-        //ws_subscription.unsubscribe();
+        self.poll_filters(&eloop);
+        println!(
+            "Chain State {:?}",
+            self.state_manager.borrow().current_state
+        );
+        let ws_subscription = self.run_blocks_monitor(&eloop);
+        eloop.handle().spawn(ws_subscription);
         //drop(web3);
     }
 
-    fn transition(&mut self, state_change: StateChange) {
-        let transition_result = self.state_manager.transition(state_change.clone());
+    fn transition(&self, state_change: StateChange) {
+        let transition_result =
+            StateManager::transition(self.state_manager.clone(), state_change.clone());
         if let Err(e) = transition_result {
             println!("Failed to transition: {}", e);
         }
@@ -124,7 +132,7 @@ impl RaidenService {
         }
     }
 
-    fn install_filters(&mut self) {
+    fn install_filters(&self) {
         let registry_address: Address = "8CA88eF59acd4C0810f2b6a418Fe7e3efdbAA020"
             .to_string()
             .parse()
@@ -133,65 +141,76 @@ impl RaidenService {
             .create_contract_event_filters("TokenNetworkRegistry".to_string(), registry_address);
     }
 
-    pub fn poll_filters(&mut self) {
+    pub fn poll_filters(&self, eloop: &reactor::Core) {
         let infura_http = "https://kovan.infura.io/v3/6fdc99560fce488cba4a52b6c8c0574b";
-        let mut eloop = tokio_core::reactor::Core::new().unwrap();
+
         let web3 = web3::Web3::new(
             web3::transports::Http::with_event_loop(infura_http, &eloop.handle(), 1).unwrap(),
         );
 
-        let mut state_changes = vec![];
         for (_, contract_filters) in self.contracts_registry.filters.borrow().iter() {
             for filter in contract_filters.values() {
-                let event_future = web3.eth().logs((*filter).clone());
-                let result = eloop.run(event_future);
-
-                if let Ok(logs) = result {
-                    for log in logs {
-                        if let Some(state_change) = events::log_to_blockchain_state_change(
-                            self.state_manager.current_state.as_ref().unwrap(),
-                            &self.contracts_registry,
-                            &log,
-                        ) {
-                            state_changes.push(state_change);
+                let current_state = self.state_manager.borrow().current_state.clone();
+                let contracts_registry = self.contracts_registry.clone();
+                let state_manager = self.state_manager.clone();
+                let event_future = web3
+                    .eth()
+                    .logs((*filter).clone())
+                    .into_future()
+                    .and_then(move |logs| {
+                        for log in logs {
+                            if let Some(state_change) = events::log_to_blockchain_state_change(
+                                &current_state,
+                                &contracts_registry,
+                                &log,
+                            ) {
+                                println!("State transition {:#?}", state_change);
+                                let _ =
+                                    StateManager::transition(state_manager.clone(), state_change);
+                            }
                         }
-                    }
-                }
-            }
-        }
+                        futures::future::ok(())
+                    })
+                    .map_err(|e| println!("Error {}", e));
 
-        for state_change in state_changes {
-            self.transition(state_change);
+                let _result = eloop.handle().spawn(event_future);
+            }
         }
     }
 
     pub fn run_blocks_monitor(
-        &mut self,
-    ) -> (Web3<WebSocket>, SubscriptionStream<WebSocket, BlockHeader>) {
+        &self,
+        eloop: &reactor::Core,
+    ) -> impl futures::Future<Item = (), Error = ()> + 'static {
+        println!("Connecting websocket");
         let infura_ws = "wss://kovan.infura.io/ws/v3/6fdc99560fce488cba4a52b6c8c0574b";
-        let (_eloop, ws) = WebSocket::new(infura_ws).unwrap();
+        let ws = WebSocket::with_event_loop(infura_ws, &eloop.handle()).unwrap();
         let web3 = web3::Web3::new(ws.clone());
+        println!("Connected");
+        let state_manager = self.state_manager.clone();
+        let chain_id = self.chain_id.clone();
+        Box::new(
+            web3.eth_subscribe()
+                .subscribe_new_heads()
+                .and_then(move |sub| {
+                    sub.for_each(move |block| {
+                        let block_number = block.number.unwrap();
 
-        let mut sub = web3.eth_subscribe().subscribe_new_heads().wait().unwrap();
+                        println!("Received block: {}", block_number);
 
-        (&mut sub)
-            .for_each(|block| {
-                let block_number = block.number.unwrap();
+                        let block_state_change =
+                            transfer::state_change::Block::new(chain_id.clone(), block_number);
 
-                println!("Received block: {}", block_number);
+                        let _ = StateManager::transition(
+                            state_manager.clone(),
+                            StateChange::Block(block_state_change),
+                        );
 
-                let block_state_change =
-                    transfer::state_change::Block::new(self.chain_id.clone(), block_number);
-
-                let _ = self
-                    .state_manager
-                    .transition(StateChange::Block(block_state_change));
-
-                Ok(())
-            })
-            .wait()
-            .unwrap();
-
-        (web3, sub)
+                        Ok(())
+                    })
+                })
+                .map_err(|e| eprintln!("Error fetching block {}", e))
+                .into_future(),
+        )
     }
 }

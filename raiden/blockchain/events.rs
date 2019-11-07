@@ -23,13 +23,15 @@ fn create_token_network_created_state_change(base_event: Event, log: &Log) -> Op
     };
     let token_network = TokenNetworkState::new(token_network_address, token_address);
     let token_network_registry_address = log.address;
-    Some(StateChange::ContractReceiveTokenNetworkCreated(ContractReceiveTokenNetworkCreated {
-        transaction_hash: Some(base_event.transaction_hash),
-        block_number: base_event.block_number,
-        block_hash: base_event.block_hash,
-        token_network_registry_address,
-        token_network,
-    }))
+    Some(StateChange::ContractReceiveTokenNetworkCreated(
+        ContractReceiveTokenNetworkCreated {
+            transaction_hash: Some(base_event.transaction_hash),
+            block_number: base_event.block_number,
+            block_hash: base_event.block_hash,
+            token_network_registry_address,
+            token_network,
+        },
+    ))
 }
 
 fn create_channel_opened_state_change(
@@ -89,28 +91,26 @@ fn create_channel_opened_state_change(
         open_transaction,
     );
 
-    Some(StateChange::ContractReceiveChannelOpened(ContractReceiveChannelOpened {
-        transaction_hash: Some(base_event.transaction_hash),
-        block_number: base_event.block_number,
-        block_hash: base_event.block_hash,
-        channel_state: channel_state.unwrap(),
-    }))
+    Some(StateChange::ContractReceiveChannelOpened(
+        ContractReceiveChannelOpened {
+            transaction_hash: Some(base_event.transaction_hash),
+            block_number: base_event.block_number,
+            block_hash: base_event.block_hash,
+            channel_state: channel_state.unwrap(),
+        },
+    ))
 }
 
 pub fn log_to_blockchain_state_change(
-    chain_state: &ChainState,
+    chain_state: &Option<ChainState>,
     contract_registry: &ContractRegistry,
     log: &Log,
 ) -> Option<StateChange> {
     let base_event = contract_registry.log_to_event(log)?;
-
+    let chain_state = chain_state.as_ref().unwrap();
     match base_event.name.as_ref() {
         "TokenNetworkCreated" => create_token_network_created_state_change(base_event, log),
-        "ChannelOpened" => create_channel_opened_state_change(
-            chain_state,
-            base_event,
-            log,
-        ),
+        "ChannelOpened" => create_channel_opened_state_change(&chain_state, base_event, log),
         &_ => None,
     }
 }

@@ -1,6 +1,8 @@
+extern crate tokio_core;
 extern crate web3;
 
 use raiden::accounts::keystore;
+use raiden::api::http;
 use raiden::cli;
 use raiden::service;
 use std::path::Path;
@@ -19,9 +21,13 @@ fn main() {
     let our_address = keys[&selected_key_filename].clone();
     let secret_key = cli::prompt_password(selected_key_filename);
 
-    if let Some(_run_matches) = matches.subcommand_matches("run") {
-        let mut service = service::RaidenService::new(chain_id, our_address, secret_key);
+    let mut eloop = tokio_core::reactor::Core::new().unwrap();
 
-        service.start();
+    if let Some(_) = matches.subcommand_matches("run") {
+        let service = service::RaidenService::new(chain_id, our_address, secret_key);
+
+        service.start(&eloop);
+        let server = http::server();
+        eloop.run(server);
     }
 }

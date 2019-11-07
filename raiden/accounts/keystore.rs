@@ -1,10 +1,10 @@
-use std::io;
-use std::collections::HashMap;
-use std::path::Path;
-use std::fs::{self, DirEntry, File};
-use web3::types::Address;
 use ethsign::{KeyFile, Protected, SecretKey};
 use serde_json;
+use std::collections::HashMap;
+use std::fs::{self, DirEntry, File};
+use std::io;
+use std::path::Path;
+use web3::types::Address;
 
 pub fn list_keys(keystore: &Path) -> io::Result<HashMap<String, Address>> {
     let mut keys: HashMap<String, Address> = HashMap::new();

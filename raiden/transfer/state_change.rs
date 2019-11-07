@@ -1,9 +1,5 @@
 use crate::enums::ChainID;
-use crate::transfer::state::{
-    ChannelState,
-    TokenNetworkRegistryState,
-    TokenNetworkState,
-};
+use crate::transfer::state::{ChannelState, TokenNetworkRegistryState, TokenNetworkState};
 use serde::{Deserialize, Serialize};
 use web3::types::{Address, H256, U64};
 

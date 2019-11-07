@@ -36,7 +36,7 @@ impl error::Error for RaidenError {
 }
 
 #[derive(Debug, Clone)]
-pub struct StateTransitionError{
+pub struct StateTransitionError {
     pub msg: String,
 }
 

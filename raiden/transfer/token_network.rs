@@ -34,11 +34,9 @@ pub fn state_transition(
         StateChange::ContractReceiveChannelOpened(state_change) => {
             handle_contract_receive_channel_opened(token_network, state_change)
         }
-        _ => {
-            Err(StateTransitionError {
-                msg: String::from("Could not transition token network")
-            })
-        }
+        _ => Err(StateTransitionError {
+            msg: String::from("Could not transition token network"),
+        }),
     };
     result
 }

@@ -3,6 +3,7 @@ use crate::errors;
 use crate::storage;
 use crate::transfer::chain::{self, ChainTransition};
 use crate::transfer::state::ChainState;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::result;
 
@@ -25,14 +26,6 @@ impl StateManager {
         Err(errors::RaidenError {
             msg: String::from("Invalid state"),
         })
-    }
-
-    pub fn transition(&mut self, state_change: StateChange) -> Result<bool> {
-        match self.store_state_change(state_change.clone()) {
-            Ok(result) => Ok(result),
-            Err(e) => Err(e),
-        }?;
-        self.dispatch(state_change)
     }
 
     fn dispatch(&mut self, state_change: StateChange) -> Result<bool> {
@@ -59,5 +52,17 @@ impl StateManager {
                 msg: format!("Could not store state change: {}", e),
             }),
         }
+    }
+
+    pub fn transition(
+        manager: Rc<RefCell<StateManager>>,
+        state_change: StateChange,
+    ) -> Result<bool> {
+        let mut manager = manager.borrow_mut();
+        match manager.store_state_change(state_change.clone()) {
+            Ok(result) => Ok(result),
+            Err(e) => Err(e),
+        }?;
+        manager.dispatch(state_change)
     }
 }
