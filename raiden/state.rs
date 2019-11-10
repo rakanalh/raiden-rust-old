@@ -4,22 +4,32 @@ use crate::storage;
 use crate::transfer::chain::{self, ChainTransition};
 use crate::transfer::state::ChainState;
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::result;
+use std::sync::{Arc, Mutex};
 
 type Result<T> = result::Result<T, errors::StateTransitionError>;
 
+pub trait StateChangeCallback {
+    fn on_state_change(&self, state_change: StateChange);
+}
+
 pub struct StateManager {
-    dbconn: Rc<rusqlite::Connection>,
+    dbconn: Arc<Mutex<rusqlite::Connection>>,
+    state_change_callback: Option<Box<dyn StateChangeCallback>>,
     pub current_state: Option<ChainState>,
 }
 
 impl StateManager {
-    pub fn new(dbconn: Rc<rusqlite::Connection>) -> StateManager {
+    pub fn new(dbconn: Arc<Mutex<rusqlite::Connection>>) -> StateManager {
         StateManager {
             dbconn,
+            state_change_callback: None,
             current_state: None,
         }
+    }
+
+    pub fn register_callback(&mut self, callback: Box<dyn StateChangeCallback>) {
+        self.state_change_callback = Some(callback);
     }
 
     pub fn restore_state(&self) -> result::Result<bool, errors::RaidenError> {
@@ -55,7 +65,7 @@ impl StateManager {
     }
 
     pub fn transition(
-        manager: Rc<RefCell<StateManager>>,
+        manager: Arc<RefCell<StateManager>>,
         state_change: StateChange,
     ) -> Result<bool> {
         let mut manager = manager.borrow_mut();
@@ -63,6 +73,12 @@ impl StateManager {
             Ok(result) => Ok(result),
             Err(e) => Err(e),
         }?;
-        manager.dispatch(state_change)
+        let result = manager.dispatch(state_change.clone());
+
+        if let Some(callback) = &manager.state_change_callback {
+            callback.on_state_change(state_change.clone());
+        }
+
+        result
     }
 }

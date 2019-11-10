@@ -1,7 +1,7 @@
 use crate::enums::StateChange;
 use crate::errors::StateTransitionError;
 use crate::events::Event;
-use crate::transfer::state::{ChainState, TokenNetworkRegistryState};
+use crate::transfer::state::{ChainState, TokenNetworkRegistryState, TokenNetworkState};
 use crate::transfer::state_change;
 use crate::transfer::token_network;
 use crate::transfer::views;
@@ -88,7 +88,7 @@ fn handle_contract_receive_token_network_created(
 }
 
 fn handle_token_network_state_change(
-    chain_state: ChainState,
+    mut chain_state: ChainState,
     state_change: state_change::ContractReceiveChannelOpened,
 ) -> Result<ChainTransition, StateTransitionError> {
     let token_network_state = views::get_token_network(
@@ -105,10 +105,22 @@ fn handle_token_network_state_change(
         });
     }
     let token_network_state = token_network_state.unwrap().clone();
-    let _result = token_network::state_transition(
+    let result = token_network::state_transition(
         token_network_state,
         StateChange::ContractReceiveChannelOpened(state_change),
     );
+
+    if let Ok(transition) = result {
+        let new_state: TokenNetworkState = transition.new_state;
+        let registry_address = views::get_token_network_registry_by_token_network_address(
+            &chain_state,
+            new_state.address
+        ).unwrap().address;
+        let registry = chain_state.identifiers_to_tokennetworkregistries.get_mut(
+            &registry_address
+        ).unwrap();
+        registry.tokennetworkaddresses_to_tokennetworks.insert(new_state.address, new_state);
+    }
 
     Ok(ChainTransition {
         new_state: chain_state,
