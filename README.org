@@ -1,0 +1,11 @@
+* Raiden - Unoffical client
+
+This is my attempt to write a Raiden Client using Rust programming language.
+
+Note: This codebase is far from complete.
+
+** TODOs
+*** TODO Complete initial blockchain events sync
+*** TODO Implement API interface
+*** TODO Integrate Rust's Matrix client codebase
+*** TODO Write unit / integration tests
