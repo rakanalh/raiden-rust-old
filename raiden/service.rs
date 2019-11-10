@@ -5,6 +5,7 @@ extern crate web3;
 use crate::blockchain::contracts;
 use crate::blockchain::events;
 use crate::enums::{ChainID, StateChange};
+use crate::state::StateChangeCallback;
 use crate::state::StateManager;
 use crate::storage;
 use crate::transfer;
@@ -15,47 +16,55 @@ use futures::IntoFuture;
 use rusqlite::Connection;
 use std::cell::RefCell;
 use std::process;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use tokio_core::reactor;
 use web3::futures::{Future, Stream};
 use web3::transports::WebSocket;
 use web3::types::{Address, H256, U64};
 
+
+#[derive(Clone)]
 pub struct RaidenService {
-    pub chain_id: ChainID,
-    pub our_address: Address,
-    pub secret_key: SecretKey,
-    state_manager: Rc<RefCell<StateManager>>,
-    contracts_registry: Rc<contracts::abi::ContractRegistry>,
+    pub chain_id: Arc<ChainID>,
+    pub our_address: Arc<Address>,
+    pub secret_key: Arc<SecretKey>,
+    state_manager: Arc<RefCell<StateManager>>,
+    contracts_registry: Arc<contracts::abi::ContractRegistry>,
+}
+
+impl StateChangeCallback for RaidenService {
+    fn on_state_change(&self, state_change: StateChange) {
+        self.handle_state_change(state_change);
+    }
 }
 
 impl RaidenService {
     pub fn new(chain_id: ChainID, our_address: Address, secret_key: SecretKey) -> RaidenService {
         let conn = match Connection::open("raiden.db") {
-            Ok(conn) => Rc::new(conn),
+            Ok(conn) => Arc::new(Mutex::new(conn)),
             Err(e) => {
                 eprintln!("Could not connect to database: {}", e);
                 process::exit(1)
             }
         };
 
-        if let Err(e) = storage::setup_database(&conn) {
+        if let Err(e) = storage::setup_database(&conn.lock().unwrap()) {
             eprintln!("Could not setup database: {}", e);
             process::exit(1)
         }
 
-        let state_manager = StateManager::new(Rc::clone(&conn));
+        let state_manager = StateManager::new(Arc::clone(&conn));
         let contracts_registry = contracts::abi::ContractRegistry::default();
         RaidenService {
-            chain_id,
-            our_address,
-            secret_key,
-            contracts_registry: Rc::new(contracts_registry),
-            state_manager: Rc::new(RefCell::new(state_manager)),
+            chain_id: Arc::new(chain_id),
+            our_address: Arc::new(our_address),
+            secret_key: Arc::new(secret_key),
+            contracts_registry: Arc::new(contracts_registry),
+            state_manager: Arc::new(RefCell::new(state_manager)),
         }
     }
 
-    pub fn start(&self, eloop: &reactor::Core) {
+    pub fn initialize(&self) {
         let state_manager = self.state_manager.clone();
         let mut initialize = false;
         if let Err(_e) = state_manager.borrow_mut().restore_state() {
@@ -64,9 +73,9 @@ impl RaidenService {
 
         if initialize {
             let init_chain = ActionInitChain {
-                chain_id: self.chain_id.clone(),
+                chain_id: self.chain_id.as_ref().clone(),
                 block_number: U64::from(1),
-                our_address: self.our_address,
+                our_address: self.our_address.as_ref().clone(),
             };
             if let Err(e) = StateManager::transition(
                 self.state_manager.clone(),
@@ -97,29 +106,23 @@ impl RaidenService {
                 println!("Failed to transition: {}", e);
             }
         }
+        let service = self.clone();
+        self.state_manager.borrow_mut().register_callback(Box::new(service));
 
         self.install_filters();
-        self.poll_filters(&eloop);
+        self.poll_filters();
+        self.poll_filters();
+    }
+
+    pub fn start(&self, handle: &reactor::Handle) {
         println!(
             "Chain State {:?}",
             self.state_manager.borrow().current_state
         );
-        let ws_subscription = self.run_blocks_monitor(&eloop);
-        eloop.handle().spawn(ws_subscription);
-        //drop(web3);
+        self.run_blocks_monitor(handle);
     }
 
-    fn transition(&self, state_change: StateChange) {
-        let transition_result =
-            StateManager::transition(self.state_manager.clone(), state_change.clone());
-        if let Err(e) = transition_result {
-            println!("Failed to transition: {}", e);
-        }
-
-        self.after_state_change(state_change);
-    }
-
-    fn after_state_change(&self, state_change: StateChange) {
+    fn handle_state_change(&self, state_change: StateChange) {
         match state_change {
             StateChange::ContractReceiveTokenNetworkCreated(state_change) => {
                 let token_network_address = state_change.token_network.address;

@@ -23,11 +23,12 @@ fn main() {
 
     let mut eloop = tokio_core::reactor::Core::new().unwrap();
 
-    if let Some(_) = matches.subcommand_matches("run") {
-        let service = service::RaidenService::new(chain_id, our_address, secret_key);
+    let service = service::RaidenService::new(chain_id, our_address, secret_key);
+    service.initialize();
+    service.start(&eloop.handle());
 
-        service.start(&eloop);
+    if let Some(_) = matches.subcommand_matches("run") {
         let server = http::server();
-        eloop.run(server);
+        let _ = eloop.run(server);
     }
 }
