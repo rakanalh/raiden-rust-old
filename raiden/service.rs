@@ -144,76 +144,103 @@ impl RaidenService {
             .create_contract_event_filters("TokenNetworkRegistry".to_string(), registry_address);
     }
 
-    pub fn poll_filters(&self, eloop: &reactor::Core) {
+    pub fn poll_filters(&self) {
+        let mut eloop = tokio_core::reactor::Core::new().unwrap();
         let infura_http = "https://kovan.infura.io/v3/6fdc99560fce488cba4a52b6c8c0574b";
 
         let web3 = web3::Web3::new(
             web3::transports::Http::with_event_loop(infura_http, &eloop.handle(), 1).unwrap(),
         );
-
-        for (_, contract_filters) in self.contracts_registry.filters.borrow().iter() {
+        let filters = self.contracts_registry.filters.clone();
+        for (_, contract_filters) in filters.borrow().iter() {
             for filter in contract_filters.values() {
                 let current_state = self.state_manager.borrow().current_state.clone();
                 let contracts_registry = self.contracts_registry.clone();
                 let state_manager = self.state_manager.clone();
-                let event_future = web3
-                    .eth()
-                    .logs((*filter).clone())
-                    .into_future()
-                    .and_then(move |logs| {
-                        for log in logs {
-                            if let Some(state_change) = events::log_to_blockchain_state_change(
-                                &current_state,
-                                &contracts_registry,
-                                &log,
-                            ) {
-                                println!("State transition {:#?}", state_change);
-                                let _ =
-                                    StateManager::transition(state_manager.clone(), state_change);
-                            }
-                        }
-                        futures::future::ok(())
-                    })
-                    .map_err(|e| println!("Error {}", e));
 
-                let _result = eloop.handle().spawn(event_future);
+                let event_future = web3.eth().logs((*filter).clone());
+                if let Ok(logs) = eloop.run(event_future) {
+                    for log in logs {
+                        if let Some(state_change) = events::log_to_blockchain_state_change(
+                            &current_state,
+                            &contracts_registry,
+                            &log,
+                        ) {
+                            println!("State transition {:#?}", state_change);
+                            let _ = StateManager::transition(state_manager.clone(), state_change);
+                        }
+                    }
+                }
             }
         }
     }
 
-    pub fn run_blocks_monitor(
-        &self,
-        eloop: &reactor::Core,
-    ) -> impl futures::Future<Item = (), Error = ()> + 'static {
-        println!("Connecting websocket");
+    // pub fn poll_filters(&self, handle: &reactor::Handle) {
+    //     let infura_http = "https://kovan.infura.io/v3/6fdc99560fce488cba4a52b6c8c0574b";
+
+    //     let web3 = web3::Web3::new(
+    //         web3::transports::Http::with_event_loop(infura_http, &handle, 1).unwrap(),
+    //     );
+
+    //     for (_, contract_filters) in self.contracts_registry.filters.borrow().iter() {
+    //         for filter in contract_filters.values() {
+    //             let current_state = self.state_manager.borrow().current_state.clone();
+    //             let contracts_registry = self.contracts_registry.clone();
+    //             let state_manager = self.state_manager.clone();
+    //             let event_future = web3
+    //                 .eth()
+    //                 .logs((*filter).clone())
+    //                 .and_then(move |logs| {
+    //                     for log in logs {
+    //                         if let Some(state_change) = events::log_to_blockchain_state_change(
+    //                             &current_state,
+    //                             &contracts_registry,
+    //                             &log,
+    //                         ) {
+    //                             println!("State transition {:#?}", state_change);
+    //                             let _ =
+    //                                 StateManager::transition(state_manager.clone(), state_change);
+    //                         }
+    //                     }
+    //                     futures::future::ok(())
+    //                 })
+    //                 .map_err(|e| println!("Error {}", e))
+    //                 .map(|logs| logs);
+
+    //             handle.spawn(event_future);
+    //         }
+    //     }
+    // }
+
+    pub fn run_blocks_monitor(&self, handle: &reactor::Handle) {
         let infura_ws = "wss://kovan.infura.io/ws/v3/6fdc99560fce488cba4a52b6c8c0574b";
-        let ws = WebSocket::with_event_loop(infura_ws, &eloop.handle()).unwrap();
+        let ws = WebSocket::with_event_loop(infura_ws, handle).unwrap();
         let web3 = web3::Web3::new(ws.clone());
-        println!("Connected");
         let state_manager = self.state_manager.clone();
         let chain_id = self.chain_id.clone();
-        Box::new(
-            web3.eth_subscribe()
-                .subscribe_new_heads()
-                .and_then(move |sub| {
-                    sub.for_each(move |block| {
-                        let block_number = block.number.unwrap();
 
-                        println!("Received block: {}", block_number);
+        let sockets_future = web3
+            .eth_subscribe()
+            .subscribe_new_heads()
+            .and_then(move |sub| {
+                sub.for_each(move |block| {
+                    let block_number = block.number.unwrap();
 
-                        let block_state_change =
-                            transfer::state_change::Block::new(chain_id.clone(), block_number);
+                    println!("Received block: {}", block_number);
 
-                        let _ = StateManager::transition(
-                            state_manager.clone(),
-                            StateChange::Block(block_state_change),
-                        );
+                    let block_state_change =
+                        transfer::state_change::Block::new(chain_id.as_ref().clone(), block_number);
 
-                        Ok(())
-                    })
+                    let _ = StateManager::transition(
+                        state_manager.clone(),
+                        StateChange::Block(block_state_change),
+                    );
+
+                    Ok(())
                 })
-                .map_err(|e| eprintln!("Error fetching block {}", e))
-                .into_future(),
-        )
+            })
+            .map_err(|e| eprintln!("Error fetching block {}", e))
+            .into_future();
+        handle.spawn(sockets_future);
     }
 }
