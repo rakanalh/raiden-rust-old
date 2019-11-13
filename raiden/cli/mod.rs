@@ -34,6 +34,7 @@ pub fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
                 .short("e")
                 .long("eth-rpc-endpoint")
                 .required(true)
+                .takes_value(true)
                 .help("Specify the RPC endpoint to interact with"),
         )
         .arg(

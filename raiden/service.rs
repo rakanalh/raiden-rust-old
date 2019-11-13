@@ -15,6 +15,7 @@ use crate::transfer::state_change::{ActionInitChain, ContractReceiveTokenNetwork
 use ethsign::SecretKey;
 use futures::IntoFuture;
 use rusqlite::Connection;
+use slog::Logger;
 use std::cell::RefCell;
 use std::process;
 use std::sync::{Arc, Mutex};
@@ -30,6 +31,7 @@ pub struct RaidenService {
     pub secret_key: Arc<SecretKey>,
     state_manager: Arc<RefCell<StateManager>>,
     contracts_registry: Arc<contracts::abi::ContractRegistry>,
+    log: Logger,
 }
 
 impl StateChangeCallback for RaidenService {
@@ -39,17 +41,17 @@ impl StateChangeCallback for RaidenService {
 }
 
 impl RaidenService {
-    pub fn new(chain_id: ChainID, our_address: Address, secret_key: SecretKey) -> RaidenService {
+    pub fn new(chain_id: ChainID, our_address: Address, secret_key: SecretKey, log: Logger) -> RaidenService {
         let conn = match Connection::open("raiden.db") {
             Ok(conn) => Arc::new(Mutex::new(conn)),
             Err(e) => {
-                eprintln!("Could not connect to database: {}", e);
+                crit!(log, "Could not connect to database: {}", e);
                 process::exit(1)
             }
         };
 
         if let Err(e) = storage::setup_database(&conn.lock().unwrap()) {
-            eprintln!("Could not setup database: {}", e);
+            crit!(log, "Could not setup database: {}", e);
             process::exit(1)
         }
 
@@ -61,6 +63,7 @@ impl RaidenService {
             secret_key: Arc::new(secret_key),
             contracts_registry: Arc::new(contracts_registry),
             state_manager: Arc::new(RefCell::new(state_manager)),
+            log: log,
         }
     }
 
@@ -103,7 +106,7 @@ impl RaidenService {
                 StateChange::ContractReceiveTokenNetworkRegistry(new_network_registry_state_change),
             );
             if let Err(e) = transition_result {
-                println!("Failed to transition: {}", e);
+                warn!(self.log, "Failed to transition: {}", e);
             }
         }
         let service = self.clone();
@@ -117,7 +120,7 @@ impl RaidenService {
     }
 
     pub fn start(&self, handle: &reactor::Handle, config: cli::Config) {
-        println!(
+        debug!(self.log,
             "Chain State {:?}",
             self.state_manager.borrow().current_state
         );
@@ -168,7 +171,7 @@ impl RaidenService {
                             &contracts_registry,
                             &log,
                         ) {
-                            println!("State transition {:#?}", state_change);
+                            debug!(self.log, "State transition {:#?}", state_change);
                             let _ = StateManager::transition(state_manager.clone(), state_change);
                         }
                     }
@@ -182,6 +185,7 @@ impl RaidenService {
         let web3 = web3::Web3::new(ws.clone());
         let state_manager = self.state_manager.clone();
         let chain_id = self.chain_id.clone();
+        let log = self.log.clone();
 
         let sockets_future = web3
             .eth_subscribe()
@@ -190,7 +194,7 @@ impl RaidenService {
                 sub.for_each(move |block| {
                     let block_number = block.number.unwrap();
 
-                    println!("Received block: {}", block_number);
+                    debug!(log.clone(), "Received block: {}", block_number);
 
                     let block_state_change =
                         transfer::state_change::Block::new(chain_id.as_ref().clone(), block_number);

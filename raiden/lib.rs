@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate slog;
+
 pub mod accounts;
 pub mod api;
 pub mod blockchain;
