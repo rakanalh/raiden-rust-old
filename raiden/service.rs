@@ -4,6 +4,7 @@ extern crate web3;
 
 use crate::blockchain::contracts;
 use crate::blockchain::events;
+use crate::cli;
 use crate::enums::{ChainID, StateChange};
 use crate::state::StateChangeCallback;
 use crate::state::StateManager;
@@ -21,7 +22,6 @@ use tokio_core::reactor;
 use web3::futures::{Future, Stream};
 use web3::transports::WebSocket;
 use web3::types::{Address, H256, U64};
-
 
 #[derive(Clone)]
 pub struct RaidenService {
@@ -64,7 +64,7 @@ impl RaidenService {
         }
     }
 
-    pub fn initialize(&self) {
+    pub fn initialize(&self, config: &cli::Config) {
         let state_manager = self.state_manager.clone();
         let mut initialize = false;
         if let Err(_e) = state_manager.borrow_mut().restore_state() {
@@ -107,19 +107,21 @@ impl RaidenService {
             }
         }
         let service = self.clone();
-        self.state_manager.borrow_mut().register_callback(Box::new(service));
+        self.state_manager
+            .borrow_mut()
+            .register_callback(Box::new(service));
 
         self.install_filters();
-        self.poll_filters();
-        self.poll_filters();
+        self.poll_filters(config.eth_http_rpc_endpoint.clone());
+        //self.poll_filters(config.eth_http_rpc_endpoint.clone());
     }
 
-    pub fn start(&self, handle: &reactor::Handle) {
+    pub fn start(&self, handle: &reactor::Handle, config: cli::Config) {
         println!(
             "Chain State {:?}",
             self.state_manager.borrow().current_state
         );
-        self.run_blocks_monitor(handle);
+        self.run_blocks_monitor(handle, config.eth_socket_rpc_endpoint);
     }
 
     fn handle_state_change(&self, state_change: StateChange) {
@@ -131,25 +133,25 @@ impl RaidenService {
                     token_network_address,
                 );
             }
+            StateChange::Block(state_change) => {}
             _ => (),
         }
     }
 
     fn install_filters(&self) {
-        let registry_address: Address = "8CA88eF59acd4C0810f2b6a418Fe7e3efdbAA020"
-            .to_string()
-            .parse()
-            .unwrap();
-        self.contracts_registry
-            .create_contract_event_filters("TokenNetworkRegistry".to_string(), registry_address);
+        let token_network_registry_address = contracts::get_token_network_registry_address();
+        self.contracts_registry.create_contract_event_filters(
+            "TokenNetworkRegistry".to_string(),
+            token_network_registry_address,
+        );
     }
 
-    pub fn poll_filters(&self) {
+    pub fn poll_filters(&self, http_rpc_endpoint: String) {
         let mut eloop = tokio_core::reactor::Core::new().unwrap();
-        let infura_http = "https://kovan.infura.io/v3/6fdc99560fce488cba4a52b6c8c0574b";
 
         let web3 = web3::Web3::new(
-            web3::transports::Http::with_event_loop(infura_http, &eloop.handle(), 1).unwrap(),
+            web3::transports::Http::with_event_loop(&http_rpc_endpoint, &eloop.handle(), 1)
+                .unwrap(),
         );
         let filters = self.contracts_registry.filters.clone();
         for (_, contract_filters) in filters.borrow().iter() {
@@ -175,46 +177,8 @@ impl RaidenService {
         }
     }
 
-    // pub fn poll_filters(&self, handle: &reactor::Handle) {
-    //     let infura_http = "https://kovan.infura.io/v3/6fdc99560fce488cba4a52b6c8c0574b";
-
-    //     let web3 = web3::Web3::new(
-    //         web3::transports::Http::with_event_loop(infura_http, &handle, 1).unwrap(),
-    //     );
-
-    //     for (_, contract_filters) in self.contracts_registry.filters.borrow().iter() {
-    //         for filter in contract_filters.values() {
-    //             let current_state = self.state_manager.borrow().current_state.clone();
-    //             let contracts_registry = self.contracts_registry.clone();
-    //             let state_manager = self.state_manager.clone();
-    //             let event_future = web3
-    //                 .eth()
-    //                 .logs((*filter).clone())
-    //                 .and_then(move |logs| {
-    //                     for log in logs {
-    //                         if let Some(state_change) = events::log_to_blockchain_state_change(
-    //                             &current_state,
-    //                             &contracts_registry,
-    //                             &log,
-    //                         ) {
-    //                             println!("State transition {:#?}", state_change);
-    //                             let _ =
-    //                                 StateManager::transition(state_manager.clone(), state_change);
-    //                         }
-    //                     }
-    //                     futures::future::ok(())
-    //                 })
-    //                 .map_err(|e| println!("Error {}", e))
-    //                 .map(|logs| logs);
-
-    //             handle.spawn(event_future);
-    //         }
-    //     }
-    // }
-
-    pub fn run_blocks_monitor(&self, handle: &reactor::Handle) {
-        let infura_ws = "wss://kovan.infura.io/ws/v3/6fdc99560fce488cba4a52b6c8c0574b";
-        let ws = WebSocket::with_event_loop(infura_ws, handle).unwrap();
+    pub fn run_blocks_monitor(&self, handle: &reactor::Handle, eth_socket_rpc_endpoint: String) {
+        let ws = WebSocket::with_event_loop(&eth_socket_rpc_endpoint, handle).unwrap();
         let web3 = web3::Web3::new(ws.clone());
         let state_manager = self.state_manager.clone();
         let chain_id = self.chain_id.clone();

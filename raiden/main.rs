@@ -5,7 +5,7 @@ use raiden::accounts::keystore;
 use raiden::api::http;
 use raiden::cli;
 use raiden::service;
-use raiden::utils::{ToHTTPEndpoint, ToSocketEndpoint};
+use raiden::traits::{ToHTTPEndpoint, ToSocketEndpoint};
 use std::path::Path;
 
 fn main() {
@@ -46,8 +46,8 @@ fn main() {
     let mut eloop = tokio_core::reactor::Core::new().unwrap();
 
     let service = service::RaidenService::new(chain_id, our_address, config.private_key);
-    service.initialize(config.eth_http_rpc_endpoint);
-    service.start(&eloop.handle());
+    service.initialize(&config);
+    service.start(&eloop.handle(), config);
 
     if let Some(_) = matches.subcommand_matches("run") {
         let server = http::server();

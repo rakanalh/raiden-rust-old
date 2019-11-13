@@ -8,6 +8,7 @@ use web3::types::Address;
 
 use crate::accounts::keystore;
 
+#[derive(Clone)]
 pub struct Config<'a> {
     pub keystore_path: &'a Path,
     pub private_key: SecretKey,
