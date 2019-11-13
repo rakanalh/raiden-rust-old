@@ -3,9 +3,18 @@ use ethsign::SecretKey;
 use rpassword;
 use std::collections::HashMap;
 use std::io::{stdin, stdout, Write};
+use std::path::Path;
 use web3::types::Address;
 
 use crate::accounts::keystore;
+
+pub struct Config<'a> {
+    pub keystore_path: &'a Path,
+    pub private_key: SecretKey,
+
+    pub eth_http_rpc_endpoint: String,
+    pub eth_socket_rpc_endpoint: String,
+}
 
 pub fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
     App::new("Raiden unofficial rust client")

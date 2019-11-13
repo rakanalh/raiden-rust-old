@@ -19,6 +19,7 @@ serde_json = "1.0.40"
 tokio = "0.1.17"
 tokio-core = "0.1.17"
 web3 = { git = "https://github.com/tomusdrw/rust-web3" }
+url = "2.1.0"
 
 [[bin]]
 path = "raiden/main.rs"
