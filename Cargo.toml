@@ -9,9 +9,9 @@ clap = "2.33.0"
 ethabi = "8.0.0"
 ethereum-types = "0.6.0"
 ethsign = "0.7.2"
-futures = "0.1.21"
+futures = { version = "0.3", features = ["compat"] }
 hex = "0.4.0"
-hyper = "0.12.35"
+hyper = "0.13.1"
 rpassword = "4.0"
 rusqlite = "0.20.0"
 serde = "1.0.101"
@@ -20,9 +20,8 @@ slog = "2.5.2"
 slog-async = "2.3.0"
 slog-json = "2.3.0"
 slog-term = "2.4.2"
-tokio = "0.1.17"
-tokio-core = "0.1.17"
-web3 = { git = "https://github.com/tomusdrw/rust-web3" }
+tokio = { version = "0.2.9", features=["full"]}
+web3 = "0.8.0"
 url = "2.1.0"
 
 [[bin]]
