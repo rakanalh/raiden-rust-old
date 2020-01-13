@@ -2,7 +2,7 @@ extern crate futures;
 extern crate hyper;
 extern crate serde_json;
 
-use futures::{future, Future, Stream};
+use futures::{future, Future};
 use hyper::client::HttpConnector;
 use hyper::service::service_fn;
 use hyper::{header, Body, Client, Method, Request, Response, Server, StatusCode};
@@ -66,7 +66,6 @@ fn info_endpoint() -> ResponseFuture {
     Box::new(future::ok(res))
 }
 
-
 fn handle_request(req: Request<Body>, _client: &Client<HttpConnector>) -> ResponseFuture {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/info") => info_endpoint(),
@@ -76,10 +75,7 @@ fn handle_request(req: Request<Body>, _client: &Client<HttpConnector>) -> Respon
             // Return 404 not found response.
             let body = Body::from(NOTFOUND);
             Box::new(future::ok(
-                Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(body)
-                    .unwrap(),
+                Response::builder().status(StatusCode::NOT_FOUND).body(body).unwrap(),
             ))
         }
     }

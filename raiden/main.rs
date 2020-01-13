@@ -63,7 +63,7 @@ async fn main() {
     service.start(config).await;
 
     if let Some(_) = matches.subcommand_matches("run") {
-        let server = http::server(log.clone());
-        let _ = eloop.run(server);
+        //let server = http::server(log.clone());
+        // let _ = eloop.run(server);
     }
 }
