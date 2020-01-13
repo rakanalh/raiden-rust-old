@@ -1,6 +1,7 @@
 use clap::{App, Arg, SubCommand};
 use ethsign::SecretKey;
 use rpassword;
+use slog::Logger;
 use std::collections::HashMap;
 use std::io::{stdin, stdout, Write};
 use std::path::Path;
@@ -31,8 +32,14 @@ pub fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
         )
         .arg(
             Arg::with_name("eth-rpc-endpoint")
-                .short("e")
                 .long("eth-rpc-endpoint")
+                .required(true)
+                .takes_value(true)
+                .help("Specify the RPC endpoint to interact with"),
+        )
+        .arg(
+            Arg::with_name("eth-rpc-socket-endpoint")
+                .long("eth-rpc-socket-endpoint")
                 .required(true)
                 .takes_value(true)
                 .help("Specify the RPC endpoint to interact with"),
@@ -78,10 +85,11 @@ pub fn prompt_key(keys: &HashMap<String, Address>) -> String {
     }
 }
 
-pub fn prompt_password(key_filename: String) -> SecretKey {
+pub fn prompt_password(key_filename: String, log: Logger) -> SecretKey {
     loop {
         let pass = rpassword::read_password_from_tty(Some("Password: ")).unwrap();
         let unlock = keystore::use_key(&key_filename, pass.to_string());
+        info!(log, "Key unlocked");
         if let Some(secret_key) = unlock {
             return secret_key;
         }
