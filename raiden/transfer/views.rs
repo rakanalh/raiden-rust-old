@@ -1,4 +1,4 @@
-use crate::transfer::state::{ChainState, TokenNetworkState, TokenNetworkRegistryState};
+use crate::transfer::state::{ChainState, TokenNetworkRegistryState, TokenNetworkState};
 use web3::types::Address;
 
 pub fn get_token_network<'a>(

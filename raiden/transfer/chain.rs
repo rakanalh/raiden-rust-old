@@ -114,12 +114,17 @@ fn handle_token_network_state_change(
         let new_state: TokenNetworkState = transition.new_state;
         let registry_address = views::get_token_network_registry_by_token_network_address(
             &chain_state,
-            new_state.address
-        ).unwrap().address;
-        let registry = chain_state.identifiers_to_tokennetworkregistries.get_mut(
-            &registry_address
-        ).unwrap();
-        registry.tokennetworkaddresses_to_tokennetworks.insert(new_state.address, new_state);
+            new_state.address,
+        )
+        .unwrap()
+        .address;
+        let registry = chain_state
+            .identifiers_to_tokennetworkregistries
+            .get_mut(&registry_address)
+            .unwrap();
+        registry
+            .tokennetworkaddresses_to_tokennetworks
+            .insert(new_state.address, new_state);
     }
 
     Ok(ChainTransition {
