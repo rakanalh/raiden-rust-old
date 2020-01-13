@@ -2,7 +2,7 @@ use crate::enums::ChainID;
 use crate::errors::ChannelError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use web3::types::{Address, H256, U256, U64};
+use web3::types::{Address, H256, U256};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CanonicalIdentifier {
@@ -14,13 +14,13 @@ pub struct CanonicalIdentifier {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChainState {
     pub chain_id: ChainID,
-    pub block_number: U64,
+    pub block_number: U256,
     pub our_address: Address,
     pub identifiers_to_tokennetworkregistries: HashMap<Address, TokenNetworkRegistryState>,
 }
 
 impl ChainState {
-    pub fn new(chain_id: ChainID, block_number: U64, our_address: Address) -> ChainState {
+    pub fn new(chain_id: ChainID, block_number: U256, our_address: Address) -> ChainState {
         ChainState {
             chain_id,
             block_number,
@@ -38,10 +38,7 @@ pub struct TokenNetworkRegistryState {
 }
 
 impl TokenNetworkRegistryState {
-    pub fn new(
-        address: Address,
-        token_network_list: Vec<TokenNetworkState>,
-    ) -> TokenNetworkRegistryState {
+    pub fn new(address: Address, token_network_list: Vec<TokenNetworkState>) -> TokenNetworkRegistryState {
         let mut registry_state = TokenNetworkRegistryState {
             address: Address::zero(),
             tokennetworkaddresses_to_tokennetworks: HashMap::new(),
@@ -307,7 +304,7 @@ pub enum TransactionResult {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionExecutionStatus {
-    pub started_block_number: Option<U64>,
-    pub finished_block_number: Option<U64>,
+    pub started_block_number: Option<U256>,
+    pub finished_block_number: Option<U256>,
     pub result: Option<TransactionResult>,
 }

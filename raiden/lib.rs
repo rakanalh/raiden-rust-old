@@ -1,5 +1,7 @@
+extern crate tokio;
 #[macro_use]
 extern crate slog;
+extern crate web3;
 
 pub mod accounts;
 pub mod api;

@@ -2,12 +2,12 @@ use ethabi;
 use serde_json;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use web3::types::{Address, BlockNumber, Filter, FilterBuilder, Log, H256, U64};
+use web3::types::{Address, BlockNumber, Filter, FilterBuilder, Log, H256, U256};
 
 #[derive(Clone, Debug)]
 pub struct Event {
     pub name: String,
-    pub block_number: U64,
+    pub block_number: U256,
     pub block_hash: H256,
     pub transaction_hash: H256,
     pub data: Vec<ethabi::Token>,
@@ -81,9 +81,7 @@ impl ContractRegistry {
                         let indexed_inputs: Vec<&ethabi::EventParam> =
                             event.inputs.iter().filter(|input| input.indexed).collect();
                         for topic in &log.topics[1..] {
-                            if let Ok(decoded_value) =
-                                ethabi::decode(&[indexed_inputs[0].kind.clone()], &topic.0)
-                            {
+                            if let Ok(decoded_value) = ethabi::decode(&[indexed_inputs[0].kind.clone()], &topic.0) {
                                 data.push(decoded_value[0].clone());
                             }
                         }

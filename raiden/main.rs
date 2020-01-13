@@ -1,18 +1,19 @@
 #[macro_use]
 extern crate slog;
 extern crate slog_term;
-extern crate tokio_core;
+extern crate tokio;
 extern crate web3;
 
 use raiden::accounts::keystore;
-use raiden::api::http;
+//use raiden::api::http;
 use raiden::cli;
 use raiden::service;
 use raiden::traits::{ToHTTPEndpoint, ToSocketEndpoint};
-use std::path::Path;
 use slog::Drain;
+use std::path::Path;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
@@ -25,17 +26,18 @@ fn main() {
     let chain_name = matches.value_of("chain-id").unwrap();
     let chain_id = chain_name.parse().unwrap();
 
-    let eth_rpc_endpoint = matches.value_of("eth-rpc-endpoint").unwrap();
-    let http_endpoint = eth_rpc_endpoint.to_http();
+    let eth_rpc_http_endpoint = matches.value_of("eth-rpc-endpoint").unwrap();
+    let eth_rpc_socket_endpoint = matches.value_of("eth-rpc-socket-endpoint").unwrap();
+    let http_endpoint = eth_rpc_http_endpoint.to_http();
     if let Err(e) = http_endpoint {
         crit!(log, "Invalid RPC endpoint: {}", e);
-        return
+        return;
     }
 
-    let socket_endpoint = eth_rpc_endpoint.to_socket();
+    let socket_endpoint = eth_rpc_socket_endpoint.to_socket();
     if let Err(e) = socket_endpoint {
         crit!(log, "Invalid RPC endpoint: {}", e);
-        return
+        return;
     }
 
     let keystore_path = Path::new(matches.value_of("keystore-path").unwrap());
@@ -43,7 +45,7 @@ fn main() {
 
     let selected_key_filename = cli::prompt_key(&keys);
     let our_address = keys[&selected_key_filename].clone();
-    let private_key = cli::prompt_password(selected_key_filename);
+    let private_key = cli::prompt_password(selected_key_filename, log.clone());
 
     let config = cli::Config {
         keystore_path: keystore_path,
@@ -51,12 +53,14 @@ fn main() {
         eth_http_rpc_endpoint: http_endpoint.unwrap(),
         eth_socket_rpc_endpoint: socket_endpoint.unwrap(),
     };
+    let (eloop, http) = web3::transports::Http::new(&config.eth_http_rpc_endpoint).unwrap();
+    eloop.into_remote();
+    let web3 = web3::Web3::new(http);
 
-    let mut eloop = tokio_core::reactor::Core::new().unwrap();
+    let service = service::RaidenService::new(web3, chain_id, our_address, config.private_key.clone(), log.clone());
 
-    let service = service::RaidenService::new(chain_id, our_address, config.private_key.clone(), log.clone());
-    service.initialize(&config);
-    service.start(&eloop.handle(), config);
+    service.initialize(&config).await;
+    service.start(config).await;
 
     if let Some(_) = matches.subcommand_matches("run") {
         let server = http::server(log.clone());
