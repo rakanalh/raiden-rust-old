@@ -59,7 +59,7 @@ async fn main() {
 
     let service = service::RaidenService::new(web3, chain_id, our_address, config.private_key.clone(), log.clone());
 
-    service.initialize(&config).await;
+    service.initialize().await;
     service.start(config).await;
 
     if let Some(_) = matches.subcommand_matches("run") {

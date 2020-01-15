@@ -20,14 +20,13 @@ use tokio::{self, stream::StreamExt};
 use web3::transports::WebSocket;
 use web3::types::{Address, H256, U256};
 
-#[derive(Clone)]
 pub struct RaidenService {
-    pub chain_id: Arc<ChainID>,
-    pub our_address: Arc<Address>,
-    pub secret_key: Arc<SecretKey>,
-    web3: web3::Web3<web3::transports::Http>,
+    pub chain_id: ChainID,
+    pub our_address: Address,
+    pub secret_key: SecretKey,
+    pub web3: web3::Web3<web3::transports::Http>,
+    pub contracts_registry: Arc<contracts::abi::ContractRegistry>,
     state_manager: Arc<RefCell<StateManager>>,
-    contracts_registry: Arc<contracts::abi::ContractRegistry>,
     log: Logger,
 }
 
@@ -62,16 +61,16 @@ impl RaidenService {
         let contracts_registry = contracts::abi::ContractRegistry::default();
         RaidenService {
             web3: w3,
-            chain_id: Arc::new(chain_id),
-            our_address: Arc::new(our_address),
-            secret_key: Arc::new(secret_key),
+            chain_id: chain_id,
+            our_address: our_address,
+            secret_key: secret_key,
             contracts_registry: Arc::new(contracts_registry),
             state_manager: Arc::new(RefCell::new(state_manager)),
             log: log,
         }
     }
 
-    pub async fn initialize(&self, config: &cli::Config<'_>) {
+    pub async fn initialize(&self) {
         let state_manager = self.state_manager.clone();
         let mut initialize = false;
         if let Err(_e) = state_manager.borrow_mut().restore_state() {
@@ -80,13 +79,11 @@ impl RaidenService {
 
         if initialize {
             let init_chain = ActionInitChain {
-                chain_id: self.chain_id.as_ref().clone(),
+                chain_id: self.chain_id.clone(),
                 block_number: U256::from(1),
-                our_address: self.our_address.as_ref().clone(),
+                our_address: self.our_address.clone(),
             };
-            if let Err(e) =
-                StateManager::transition(self.state_manager.clone(), StateChange::ActionInitChain(init_chain))
-            {
+            if let Err(e) = self.transition(StateChange::ActionInitChain(init_chain)).await {
                 panic!(format!("Could not initialize chain state: {}", e));
             }
 
@@ -103,20 +100,18 @@ impl RaidenService {
                 last_log_block_hash,
             );
 
-            let transition_result = StateManager::transition(
-                self.state_manager.clone(),
-                StateChange::ContractReceiveTokenNetworkRegistry(new_network_registry_state_change),
-            );
+            let transition_result = self
+                .transition(StateChange::ContractReceiveTokenNetworkRegistry(
+                    new_network_registry_state_change,
+                ))
+                .await;
             if let Err(e) = transition_result {
                 warn!(self.log, "Failed to transition: {}", e);
             }
         }
-        let service = self.clone();
-        self.state_manager.borrow_mut().register_callback(Box::new(service));
 
         self.install_filters();
-        self.poll_filters(config.eth_http_rpc_endpoint.clone()).await;
-        //self.poll_filters(config.eth_http_rpc_endpoint.clone());
+        self.poll_filters().await;
     }
 
     pub async fn start(&self, config: cli::Config<'_>) {
@@ -125,46 +120,31 @@ impl RaidenService {
         self.run_blocks_monitor(config.eth_socket_rpc_endpoint).await;
     }
 
-    fn handle_state_change(&self, state_change: StateChange) {
-        match state_change {
-            StateChange::ContractReceiveTokenNetworkCreated(state_change) => {
-                let token_network_address = state_change.token_network.address;
-                self.contracts_registry
-                    .create_contract_event_filters("TokenNetwork".to_string(), token_network_address);
-            }
-            StateChange::Block(state_change) => {}
-            _ => (),
-        }
-    }
-
     fn install_filters(&self) {
         let token_network_registry_address = contracts::get_token_network_registry_address();
         self.contracts_registry
             .create_contract_event_filters("TokenNetworkRegistry".to_string(), token_network_registry_address);
     }
 
-    pub async fn poll_filters(&self, http_rpc_endpoint: String) {
+    pub async fn poll_filters(&self) {
         let filters = self.contracts_registry.filters.clone();
         for (_, contract_filters) in filters.borrow().iter() {
             for filter in contract_filters.values() {
                 let current_state = self.state_manager.borrow().current_state.clone();
                 let contracts_registry = self.contracts_registry.clone();
-                let state_manager = self.state_manager.clone();
 
                 let logs = self.web3.eth().logs((*filter).clone()).compat().await;
                 println!("Logs {:?}", logs);
-                // if let Ok(logs) = eloop.run(event_future) {
-                //     for log in logs {
-                //         if let Some(state_change) = events::log_to_blockchain_state_change(
-                //             &current_state,
-                //             &contracts_registry,
-                //             &log,
-                //         ) {
-                //             debug!(self.log, "State transition {:#?}", state_change);
-                //             let _ = StateManager::transition(state_manager.clone(), state_change);
-                //         }
-                //     }
-                // }
+                if let Ok(logs) = logs {
+                    for log in logs {
+                        if let Some(state_change) =
+                            events::log_to_blockchain_state_change(&current_state, &contracts_registry, &log)
+                        {
+                            debug!(self.log, "State transition {:#?}", state_change);
+                            let _ = self.transition(state_change).await;
+                        }
+                    }
+                }
             }
         }
     }
@@ -173,32 +153,38 @@ impl RaidenService {
         let (eloop, ws) = WebSocket::new(&eth_socket_rpc_endpoint).unwrap();
         eloop.into_remote();
         let web3 = web3::Web3::new(ws);
-        let state_manager = self.state_manager.clone();
         let chain_id = self.chain_id.clone();
         let log = self.log.clone();
 
         let block_stream = web3.eth_subscribe().subscribe_new_heads().compat().await;
         if let Ok(stream) = block_stream {
             let mut stream = stream.compat();
-            while let subscription = stream.next().await {
-                println!("{:?}", subscription);
+            while let Some(subscription) = stream.next().await {
+                if let Ok(subscription) = subscription {
+                    println!("{:?}", subscription);
+                    if let Some(block_number) = subscription.number {
+                        debug!(log, "Received block"; "number" => block_number.to_string());
+
+                        let block_state_change =
+                            transfer::state_change::Block::new(chain_id.clone(), block_number.into());
+
+                        let _ = self.transition(StateChange::Block(block_state_change)).await;
+                    }
+                }
             }
         }
-        // kkkk.and_then(move |sub| {
-        //     sub.for_each(move |block| {
-        //         let block_number = block.number.unwrap();
+    }
 
-        //         debug!(log, "Received block"; "number" => block_number.to_string());
-
-        //         let block_state_change = transfer::state_change::Block::new(chain_id.as_ref().clone(), block_number);
-
-        //         let _ = StateManager::transition(state_manager.clone(), StateChange::Block(block_state_change));
-
-        //         Ok(())
-        //     })
-        // })
-        // .map_err(|e| eprintln!("Error fetching block {}", e))
-        // .into_stream();
-        // tokio::spawn(async move { sockets_future.await });
+    pub async fn transition(&self, state_change: StateChange) -> Result<bool> {
+        let transition_result = StateManager::transition(self.state_manager.clone(), state_change);
+        match transition_result {
+            Ok(transition) => {
+                for event in transition.events {
+                    self.event_handler.handle_event(self, event).await;
+                }
+                return Ok(true);
+            }
+            Err(e) => Err(e),
+        }
     }
 }
