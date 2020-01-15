@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-use crate::transfer::state_change::{
-    ActionInitChain, Block, ContractReceiveChannelOpened, ContractReceiveTokenNetworkCreated,
-    ContractReceiveTokenNetworkRegistry,
+use crate::transfer::{
+    event::TokenNetworkCreated,
+    state_change::{
+        ActionInitChain, Block, ContractReceiveChannelOpened, ContractReceiveTokenNetworkCreated,
+        ContractReceiveTokenNetworkRegistry,
+    },
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -37,4 +40,9 @@ pub enum StateChange {
     ContractReceiveTokenNetworkRegistry(ContractReceiveTokenNetworkRegistry),
     ContractReceiveTokenNetworkCreated(ContractReceiveTokenNetworkCreated),
     ContractReceiveChannelOpened(ContractReceiveChannelOpened),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum Event {
+    TokenNetworkCreated(TokenNetworkCreated),
 }

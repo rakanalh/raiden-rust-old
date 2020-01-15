@@ -1,6 +1,5 @@
-use crate::enums::StateChange;
+use crate::enums::{Event, StateChange};
 use crate::errors::StateTransitionError;
-use crate::events::Event;
 use crate::transfer::state::TokenNetworkState;
 use crate::transfer::state_change;
 
@@ -14,10 +13,7 @@ fn handle_contract_receive_channel_opened(
     state_change: state_change::ContractReceiveChannelOpened,
 ) -> Result<TokenNetworkTransition, StateTransitionError> {
     token_network.channelidentifiers_to_channels.insert(
-        state_change
-            .channel_state
-            .canonical_identifier
-            .chain_identifier,
+        state_change.channel_state.canonical_identifier.chain_identifier,
         state_change.channel_state,
     );
     Ok(TokenNetworkTransition {

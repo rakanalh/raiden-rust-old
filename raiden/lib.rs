@@ -10,7 +10,7 @@ pub mod cli;
 pub mod constants;
 pub mod enums;
 pub mod errors;
-pub mod events;
+pub mod event_handler;
 pub mod service;
 pub mod state;
 pub mod storage;

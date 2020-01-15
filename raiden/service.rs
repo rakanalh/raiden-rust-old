@@ -1,13 +1,14 @@
-use crate::blockchain::contracts;
-use crate::blockchain::events;
-use crate::cli;
-use crate::enums::{ChainID, StateChange};
-use crate::state::StateChangeCallback;
-use crate::state::StateManager;
-use crate::storage;
-use crate::transfer;
-use crate::transfer::state::TokenNetworkRegistryState;
-use crate::transfer::state_change::{ActionInitChain, ContractReceiveTokenNetworkRegistry};
+use crate::{
+    blockchain::contracts,
+    blockchain::events,
+    cli,
+    enums::{ChainID, StateChange},
+    event_handler::EventHandler,
+    state::{Result, StateManager},
+    storage, transfer,
+    transfer::state::TokenNetworkRegistryState,
+    transfer::state_change::{ActionInitChain, ContractReceiveTokenNetworkRegistry},
+};
 use ethsign::SecretKey;
 use futures::compat::Future01CompatExt;
 use futures::compat::Stream01CompatExt;
@@ -27,13 +28,8 @@ pub struct RaidenService {
     pub web3: web3::Web3<web3::transports::Http>,
     pub contracts_registry: Arc<contracts::abi::ContractRegistry>,
     state_manager: Arc<RefCell<StateManager>>,
+    event_handler: EventHandler,
     log: Logger,
-}
-
-impl StateChangeCallback for RaidenService {
-    fn on_state_change(&self, state_change: StateChange) {
-        self.handle_state_change(state_change);
-    }
 }
 
 impl RaidenService {
@@ -64,6 +60,7 @@ impl RaidenService {
             chain_id: chain_id,
             our_address: our_address,
             secret_key: secret_key,
+            event_handler: EventHandler::new(),
             contracts_registry: Arc::new(contracts_registry),
             state_manager: Arc::new(RefCell::new(state_manager)),
             log: log,
