@@ -7,7 +7,7 @@ use crate::transfer::state::{
 };
 use crate::transfer::state_change::{ContractReceiveChannelOpened, ContractReceiveTokenNetworkCreated};
 use ethabi::Token;
-use web3::types::{Address, Log, U256};
+use web3::types::{Address, Log, U256, U64};
 
 fn create_token_network_created_state_change(base_event: Event, log: &Log) -> Option<StateChange> {
     let token_address = match base_event.data[0] {
@@ -66,9 +66,9 @@ fn create_channel_opened_state_change(chain_state: &ChainState, base_event: Even
     let token_network_address = log.address;
     let token_address = Address::zero();
     let token_network_registry_address = Address::zero();
-    let reveal_timeout = constants::DEFAULT_REVEAL_TIMEOUT;
+    let reveal_timeout = U256::from(constants::DEFAULT_REVEAL_TIMEOUT);
     let open_transaction = TransactionExecutionStatus {
-        started_block_number: Some(U256::from(0)),
+        started_block_number: Some(U64::from(0)),
         finished_block_number: Some(base_event.block_number),
         result: Some(TransactionResult::SUCCESS),
     };

@@ -1,14 +1,14 @@
 use crate::transfer::state::TokenNetworkState;
 use crate::transfer::state_change::ContractReceiveTokenNetworkCreated;
 use serde::{Deserialize, Serialize};
-use web3::types::{Address, H256, U256};
+use web3::types::{Address, H256, U64};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TokenNetworkCreated {
     pub transaction_hash: Option<H256>,
     pub token_network_registry_address: Address,
     pub token_network: TokenNetworkState,
-    pub block_number: U256,
+    pub block_number: U64,
     pub block_hash: H256,
 }
 

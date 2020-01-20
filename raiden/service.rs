@@ -19,7 +19,7 @@ use std::process;
 use std::sync::{Arc, Mutex};
 use tokio::{self, stream::StreamExt};
 use web3::transports::WebSocket;
-use web3::types::{Address, H256, U256};
+use web3::types::{Address, BlockNumber, H256, U64};
 
 pub struct RaidenService {
     pub chain_id: ChainID,
@@ -77,7 +77,7 @@ impl RaidenService {
         if initialize {
             let init_chain = ActionInitChain {
                 chain_id: self.chain_id.clone(),
-                block_number: U256::from(1),
+                block_number: U64::from(1),
                 our_address: self.our_address.clone(),
             };
             if let Err(e) = self.transition(StateChange::ActionInitChain(init_chain)).await {
@@ -87,7 +87,7 @@ impl RaidenService {
             let token_network_registry_address = contracts::get_token_network_registry_address();
             let token_network_registry = TokenNetworkRegistryState::new(token_network_registry_address, vec![]);
 
-            let last_log_block_number = U256::from(1);
+            let last_log_block_number = U64::from(1);
             let last_log_block_hash = H256::zero();
 
             let new_network_registry_state_change = ContractReceiveTokenNetworkRegistry::new(

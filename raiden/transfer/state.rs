@@ -2,7 +2,7 @@ use crate::enums::ChainID;
 use crate::errors::ChannelError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use web3::types::{Address, H256, U256};
+use web3::types::{Address, H256, U256, U64};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CanonicalIdentifier {
@@ -14,13 +14,13 @@ pub struct CanonicalIdentifier {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChainState {
     pub chain_id: ChainID,
-    pub block_number: U256,
+    pub block_number: U64,
     pub our_address: Address,
     pub identifiers_to_tokennetworkregistries: HashMap<Address, TokenNetworkRegistryState>,
 }
 
 impl ChainState {
-    pub fn new(chain_id: ChainID, block_number: U256, our_address: Address) -> ChainState {
+    pub fn new(chain_id: ChainID, block_number: U64, our_address: Address) -> ChainState {
         ChainState {
             chain_id,
             block_number,
@@ -95,7 +95,7 @@ pub struct ChannelState {
     pub canonical_identifier: CanonicalIdentifier,
     pub token_address: Address,
     pub token_network_registry_address: Address,
-    pub reveal_timeout: u16,
+    pub reveal_timeout: U256,
     pub settle_timeout: U256,
     pub our_state: OurEndState,
     pub partner_state: PartnerEndState,
@@ -112,11 +112,11 @@ impl ChannelState {
         token_network_registry_address: Address,
         our_address: Address,
         partner_address: Address,
-        reveal_timeout: u16,
+        reveal_timeout: U256,
         settle_timeout: U256,
         open_transaction: TransactionExecutionStatus,
     ) -> Result<ChannelState, ChannelError> {
-        if U256::from(reveal_timeout) >= settle_timeout {
+        if reveal_timeout >= settle_timeout {
             return Err(ChannelError {
                 msg: "reveal_timeout must be smaller than settle_timeout".to_string(),
             });
@@ -304,7 +304,7 @@ pub enum TransactionResult {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionExecutionStatus {
-    pub started_block_number: Option<U256>,
-    pub finished_block_number: Option<U256>,
+    pub started_block_number: Option<U64>,
+    pub finished_block_number: Option<U64>,
     pub result: Option<TransactionResult>,
 }
