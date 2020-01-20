@@ -1,7 +1,7 @@
 use ethabi;
 use serde_json;
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::RwLock;
 use web3::types::{Address, BlockNumber, Filter, FilterBuilder, Log, H256, U64};
 
 #[derive(Clone, Debug)]
@@ -16,14 +16,14 @@ pub struct Event {
 #[derive(Default)]
 pub struct ContractRegistry {
     contracts: HashMap<String, ethabi::Contract>,
-    pub filters: RefCell<HashMap<String, HashMap<String, Filter>>>,
+    pub filters: RwLock<HashMap<String, HashMap<String, Filter>>>,
 }
 
 impl ContractRegistry {
     pub fn default() -> ContractRegistry {
         let mut registry = ContractRegistry {
             contracts: HashMap::new(),
-            filters: RefCell::new(HashMap::new()),
+            filters: RwLock::new(HashMap::new()),
         };
 
         let contracts_map: serde_json::Value = serde_json::from_str(super::CONTRACTS).unwrap();
@@ -39,9 +39,13 @@ impl ContractRegistry {
         registry
     }
 
-    pub fn create_contract_event_filters(&self, contract_name: String, contract_address: Address) {
-        let mut contracts_map = self.filters.borrow_mut();
+    pub fn create_contract_event_filters(
+        &self,
+        contract_name: String,
+        contract_address: Address,
         start_block_number: BlockNumber,
+    ) {
+        let mut contracts_map = self.filters.write().unwrap();
         if contracts_map.get(&contract_name).is_none() {
             for (name, contract) in &self.contracts {
                 if name.as_str() != contract_name.as_str() {

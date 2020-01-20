@@ -1,11 +1,11 @@
+use crate::enums::Event;
 use crate::enums::StateChange;
 use crate::errors;
 use crate::storage;
 use crate::transfer::chain::{self, ChainTransition};
 use crate::transfer::state::ChainState;
-use std::cell::RefCell;
 use std::result;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLockWriteGuard};
 
 pub type Result<T> = result::Result<T, errors::StateTransitionError>;
 
@@ -28,7 +28,7 @@ impl StateManager {
         })
     }
 
-    fn dispatch(&mut self, state_change: StateChange) -> Result<ChainTransition> {
+    fn dispatch(&mut self, state_change: StateChange) -> Result<Vec<Event>> {
         let current_state = self.current_state.clone();
 
         let transition: Result<ChainTransition> = chain::state_transition(current_state, state_change);
@@ -36,7 +36,7 @@ impl StateManager {
         match transition {
             Ok(transition_result) => {
                 self.current_state.replace(transition_result.new_state);
-                Ok(transition_result)
+                Ok(transition_result.events)
             }
             Err(e) => Err(errors::StateTransitionError {
                 msg: format!("Could not transition: {}", e),
@@ -53,8 +53,7 @@ impl StateManager {
         }
     }
 
-    pub fn transition(manager: Arc<RefCell<StateManager>>, state_change: StateChange) -> Result<ChainTransition> {
-        let mut manager = manager.borrow_mut();
+    pub fn transition(mut manager: RwLockWriteGuard<StateManager>, state_change: StateChange) -> Result<Vec<Event>> {
         match manager.store_state_change(state_change.clone()) {
             Ok(result) => Ok(result),
             Err(e) => Err(e),

@@ -10,12 +10,11 @@ use crate::{
     transfer::state_change::{ActionInitChain, ContractReceiveTokenNetworkRegistry},
 };
 use ethsign::SecretKey;
-use futures::compat::Future01CompatExt;
-use futures::compat::Stream01CompatExt;
+use futures::{compat::Future01CompatExt, compat::Stream01CompatExt, future::BoxFuture, future::FutureExt};
 use rusqlite::Connection;
 use slog::Logger;
-use std::cell::RefCell;
 use std::process;
+use std::sync::RwLock;
 use std::sync::{Arc, Mutex};
 use tokio::{self, stream::StreamExt};
 use web3::transports::WebSocket;
@@ -27,8 +26,7 @@ pub struct RaidenService {
     pub secret_key: SecretKey,
     pub web3: web3::Web3<web3::transports::Http>,
     pub contracts_registry: Arc<contracts::abi::ContractRegistry>,
-    state_manager: Arc<RefCell<StateManager>>,
-    event_handler: EventHandler,
+    state_manager: Arc<RwLock<StateManager>>,
     log: Logger,
 }
 
@@ -60,9 +58,8 @@ impl RaidenService {
             chain_id: chain_id,
             our_address: our_address,
             secret_key: secret_key,
-            event_handler: EventHandler::new(),
             contracts_registry: Arc::new(contracts_registry),
-            state_manager: Arc::new(RefCell::new(state_manager)),
+            state_manager: Arc::new(RwLock::new(state_manager)),
             log: log,
         }
     }
@@ -70,7 +67,7 @@ impl RaidenService {
     pub async fn initialize(&self) {
         let state_manager = self.state_manager.clone();
         let mut initialize = false;
-        if let Err(_e) = state_manager.borrow_mut().restore_state() {
+        if let Err(_e) = state_manager.write().unwrap().restore_state() {
             initialize = true;
         }
 
@@ -112,30 +109,36 @@ impl RaidenService {
     }
 
     pub async fn start(&self, config: cli::Config<'_>) {
-        debug!(self.log, "Chain State {:?}", self.state_manager.borrow().current_state);
+        debug!(
+            self.log,
+            "Chain State {:?}",
+            self.state_manager.read().unwrap().current_state
+        );
 
         self.run_blocks_monitor(config.eth_socket_rpc_endpoint).await;
     }
 
     fn install_filters(&self) {
         let token_network_registry_address = contracts::get_token_network_registry_address();
-        self.contracts_registry
-            .create_contract_event_filters("TokenNetworkRegistry".to_string(), token_network_registry_address);
+        self.contracts_registry.create_contract_event_filters(
+            "TokenNetworkRegistry".to_string(),
+            token_network_registry_address,
+            BlockNumber::Earliest,
+        );
     }
 
     pub async fn poll_filters(&self) {
-        let filters = self.contracts_registry.filters.clone();
-        for (_, contract_filters) in filters.borrow().iter() {
+        let filters = self.contracts_registry.filters.read().unwrap().clone();
+        let current_state = self.state_manager.read().unwrap().current_state.clone();
+        let contracts_registry = &self.contracts_registry;
+        for (_, contract_filters) in filters.iter() {
             for filter in contract_filters.values() {
-                let current_state = self.state_manager.borrow().current_state.clone();
-                let contracts_registry = self.contracts_registry.clone();
-
                 let logs = self.web3.eth().logs((*filter).clone()).compat().await;
                 println!("Logs {:?}", logs);
                 if let Ok(logs) = logs {
                     for log in logs {
                         if let Some(state_change) =
-                            events::log_to_blockchain_state_change(&current_state, &contracts_registry, &log)
+                            events::log_to_blockchain_state_change(&current_state, contracts_registry, &log)
                         {
                             debug!(self.log, "State transition {:#?}", state_change);
                             let _ = self.transition(state_change).await;
@@ -172,16 +175,19 @@ impl RaidenService {
         }
     }
 
-    pub async fn transition(&self, state_change: StateChange) -> Result<bool> {
-        let transition_result = StateManager::transition(self.state_manager.clone(), state_change);
-        match transition_result {
-            Ok(transition) => {
-                for event in transition.events {
-                    self.event_handler.handle_event(self, event).await;
+    pub fn transition(&self, state_change: StateChange) -> BoxFuture<Result<bool>> {
+        let transition_result = StateManager::transition(self.state_manager.write().unwrap(), state_change);
+        async move {
+            match transition_result {
+                Ok(events) => {
+                    for event in events {
+                        EventHandler::handle_event(self, event).await;
+                    }
+                    Ok(true)
                 }
-                return Ok(true);
+                Err(e) => Err(e),
             }
-            Err(e) => Err(e),
         }
+        .boxed()
     }
 }
